@@ -1,0 +1,38 @@
+# Environments (NEVER commit these)
+.env
+.env.*
+!.env.example
+.venv
+env/
+venv/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+dist/
+
+# Firebase service account keys (SENSITIVE)
+firebase-adminsdk.json
+firebase_credentials.json
+*-firebase-adminsdk-*.json
+google-services.json
+GoogleService-Info.plist
+
+# Mobile
+.expo/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
