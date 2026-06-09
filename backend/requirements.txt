@@ -4,6 +4,7 @@ motor
 pymongo
 python-dotenv
 pydantic
+pydantic-settings
 pydantic[email]
 python-jose[cryptography]
 passlib[bcrypt]
