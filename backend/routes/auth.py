@@ -18,8 +18,9 @@ class SendOTPRequest(BaseModel):
     mobile: str
 
 class VerifyOTPRequest(BaseModel):
-    mobile: str
-    otp: str
+    mobile: Optional[str] = None
+    otp: Optional[str] = None
+    firebase_token: Optional[str] = None
     language: str = "en"
     
 class VerifyOTPResponse(BaseModel):
@@ -94,31 +95,50 @@ async def verify_otp(request: VerifyOTPRequest):
                 detail="Database connection is currently unavailable. Please check your network and try again."
             )
             
-        mobile_number = request.mobile.strip().replace(" ", "")
-        if not mobile_number.startswith("+"):
-            mobile_number = "+91" + mobile_number
+        mobile_number = None
+        
+        # 1. Check if verifying via Firebase ID Token
+        if request.firebase_token:
+            print("📲 Verifying Firebase Token...")
+            try:
+                mobile_number = verify_id_token(request.firebase_token)
+                print(f"✅ Token Verified. Mobile: {mobile_number}")
+            except Exception as e:
+                print(f"❌ Token Verification Failed: {e}")
+                raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
+        
+        # 2. Check if verifying via custom DB-backed OTP
+        elif request.mobile and request.otp:
+            mobile_number = request.mobile.strip().replace(" ", "")
+            if not mobile_number.startswith("+"):
+                mobile_number = "+91" + mobile_number
+                
+            otp_entered = request.otp.strip()
+            print(f"📲 Verifying DB-backed OTP for {mobile_number}...")
             
-        otp_entered = request.otp.strip()
-        
-        print(f"📲 Verifying DB-backed OTP for {mobile_number}...")
-        
-        # Verify against our 'otps' collection
-        otp_record = await db.otps.find_one({
-            "mobile": mobile_number,
-            "otp": otp_entered,
-            "expires_at": {"$gt": datetime.utcnow()}
-        })
-        
-        if not otp_record:
-            print("❌ Invalid or expired OTP code")
+            # Verify against our 'otps' collection
+            otp_record = await db.otps.find_one({
+                "mobile": mobile_number,
+                "otp": otp_entered,
+                "expires_at": {"$gt": datetime.utcnow()}
+            })
+            
+            if not otp_record:
+                print("❌ Invalid or expired OTP code")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid or expired OTP code"
+                )
+                
+            # Delete OTP record to prevent reuse
+            await db.otps.delete_one({"_id": otp_record["_id"]})
+            print("✅ OTP verified and consumed.")
+            
+        else:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired OTP code"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Must provide either firebase_token or mobile and otp code."
             )
-            
-        # Delete OTP record to prevent reuse
-        await db.otps.delete_one({"_id": otp_record["_id"]})
-        print("✅ OTP verified and consumed.")
             
         print(f"🔍 Searching for user in collection 'users'...")
         try:
