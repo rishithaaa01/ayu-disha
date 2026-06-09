@@ -11,3 +11,4 @@ passlib[bcrypt]
 firebase-admin
 httpx
 groq
+faster-whisper
