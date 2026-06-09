@@ -145,7 +145,7 @@ export default function PatientDashboard() {
               </p>
               {recentVisit.diagnosis?.length > 0 && (
                 <div className="flex flex-wrap gap-2 mt-3">
-                  {recentVisit.diagnosis.map((d: string, i: number) => (
+                  {recentVisit.diagnosis.map((d, i) => (
                     <span key={i} className="bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded-full">{d}</span>
                   ))}
                 </div>
