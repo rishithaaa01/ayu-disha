@@ -12,3 +12,4 @@ firebase-admin
 httpx
 groq
 faster-whisper
+python-multipart
