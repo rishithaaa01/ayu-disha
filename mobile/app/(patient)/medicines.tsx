@@ -5,7 +5,7 @@ import patientApi from '../../services/patientApi';
 import MedicineCard from '../../components/MedicineCard';
 import LoadingSkeleton from '../../components/LoadingSkeleton';
 import ReminderModal from '../../components/ReminderModal';
-import * as Notifications from 'expo-notifications'; // Placeholder for reminders
+
 
 export default function MedicinesScreen() {
   const [prescriptions, setPrescriptions] = useState<any[]>([]);
@@ -67,7 +67,7 @@ export default function MedicinesScreen() {
       <ScrollView 
         contentContainerStyle={styles.content}
         refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={loadMedicines} color="#1B6CA8" />
+          <RefreshControl refreshing={loading} onRefresh={loadMedicines} colors={['#1B6CA8']} />
         }
       >
         {hasNewPrescription && (

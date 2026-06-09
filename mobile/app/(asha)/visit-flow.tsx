@@ -6,6 +6,9 @@ import { Audio } from 'expo-av';
 import { classifyRisk } from '../../services/ashaApi';
 import { startRecording, stopAndTranscribe } from '../../services/voiceService';
 import { openDatabase } from '../../database/database-sqlite';
+import axios from 'axios';
+import { Config } from '../../constants/Config';
+import * as SecureStore from 'expo-secure-store';
 
 const templates = {
   maternal: [

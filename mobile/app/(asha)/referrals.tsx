@@ -93,7 +93,7 @@ export default function ReferralsScreen() {
         <ScrollView 
           contentContainerStyle={styles.content}
           refreshControl={
-            <RefreshControl refreshing={loading} onRefresh={loadData} color="#1B6CA8" />
+            <RefreshControl refreshing={loading} onRefresh={loadData} colors={['#1B6CA8']} />
           }
         >
           
