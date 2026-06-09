@@ -20,15 +20,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Ayu Disha API", lifespan=lifespan)
 
-# Setup CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origin_regex="https?://.*",
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # Radar Middleware: Capture everything
 @app.middleware("http")
 async def radar_middleware(request: Request, call_next):
@@ -44,6 +35,15 @@ async def radar_middleware(request: Request, call_next):
     except Exception as e:
         print(f"[CRASH] RADAR CRASH: {str(e)}")
         raise e
+
+# Setup CORS (Must be registered last to wrap all other middleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex="https?://.*",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Registrer Routers: Priority Order
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
