@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from jose import jwt
 from bson import ObjectId
 import random
+from services.sms_service import sms_service
 
 router = APIRouter()
 
@@ -72,11 +73,13 @@ async def send_otp(request: SendOTPRequest):
         "expires_at": expires_at
     })
     
-    print("\n" + "╔" + "═"*50 + "╗")
-    print(f"║ [OTP SENT] Mobile: {mobile:<15} Code: {otp_code} ║")
-    print("╚" + "═"*50 + "╝\n")
+    # Send OTP via SMS service (uses Twilio or Fast2SMS if configured, else prints to console)
+    sms_res = await sms_service.send_otp(mobile, otp_code)
     
-    return {"status": "success", "message": "OTP sent successfully"}
+    return {
+        "status": "success", 
+        "message": f"OTP sent successfully via {sms_res.get('provider')}"
+    }
 
 @router.post("/verify-otp", response_model=VerifyOTPResponse)
 async def verify_otp(request: VerifyOTPRequest):
