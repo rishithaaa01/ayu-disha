@@ -23,7 +23,7 @@ app = FastAPI(title="Ayu Disha API", lifespan=lifespan)
 # Setup CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex="https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
