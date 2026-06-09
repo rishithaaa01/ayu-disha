@@ -1,16 +1,28 @@
 import { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
+import api from '../../services/api';
 
 export default function PhoneScreen() {
   const [phone, setPhone] = useState('');
+  const [loading, setLoading] = useState(false);
   
-  const handleSendOTP = () => {
-    // Note: Actual Firebase integration happens here.
-    // For Phase 1 we pass phone to OTP screen for mock verification
+  const handleSendOTP = async () => {
     const cleanPhone = phone.replace(/ /g, '');
-    router.push(`/(auth)/otp?phone=%2B91${cleanPhone}`);
+    const fullPhone = `+91${cleanPhone}`;
+    setLoading(true);
+    
+    try {
+      await api.post('/auth/send-otp', { mobile: fullPhone });
+      router.push(`/(auth)/otp?phone=${encodeURIComponent(fullPhone)}`);
+    } catch (e: any) {
+      console.error(e);
+      const errorMsg = e.response?.data?.detail || e.message || "Failed to send OTP";
+      Alert.alert("Error", errorMsg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const isValidLength = phone.length === 10;
@@ -28,15 +40,20 @@ export default function PhoneScreen() {
           value={phone}
           onChangeText={setPhone}
           placeholder="0000000000"
+          editable={!loading}
         />
       </View>
 
       <TouchableOpacity 
-        style={[styles.button, !isValidLength && styles.buttonDisabled]}
+        style={[styles.button, (!isValidLength || loading) && styles.buttonDisabled]}
         onPress={handleSendOTP}
-        disabled={!isValidLength}
+        disabled={!isValidLength || loading}
       >
-        <Text style={styles.buttonText}>Send OTP</Text>
+        {loading ? (
+          <ActivityIndicator color={Colors.white} />
+        ) : (
+          <Text style={styles.buttonText}>Send OTP</Text>
+        )}
       </TouchableOpacity>
     </View>
   );

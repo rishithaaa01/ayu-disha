@@ -9,13 +9,16 @@ from config import settings
 from datetime import datetime, timedelta
 from jose import jwt
 from bson import ObjectId
+import random
 
 router = APIRouter()
 
+class SendOTPRequest(BaseModel):
+    mobile: str
+
 class VerifyOTPRequest(BaseModel):
-    firebase_token: str
-    name: Optional[str] = None
-    role: Optional[str] = None
+    mobile: str
+    otp: str
     language: str = "en"
     
 class VerifyOTPResponse(BaseModel):
@@ -32,6 +35,49 @@ def create_access_token(data: dict):
     encoded_jwt = jwt.encode(to_encode, settings.jwt_secret, algorithm=settings.jwt_algorithm)
     return encoded_jwt
 
+@router.post("/send-otp")
+async def send_otp(request: SendOTPRequest):
+    print(f"\n--- 📲 OTP Request: {datetime.utcnow().isoformat()} ---")
+    db = get_database()
+    if db is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Database connection is currently unavailable."
+        )
+    
+    mobile = request.mobile.strip()
+    if not mobile:
+        raise HTTPException(status_code=400, detail="Mobile number is required")
+    
+    # Clean the phone number (remove spaces)
+    mobile = mobile.replace(" ", "")
+    if not mobile.startswith("+"):
+        mobile = "+91" + mobile
+        
+    # Generate 6-digit OTP
+    otp_code = f"{random.randint(100000, 999999)}"
+    
+    # Store in database with 5 minute expiration
+    now = datetime.utcnow()
+    expires_at = now + timedelta(minutes=5)
+    
+    # Delete old OTPs for this number
+    await db.otps.delete_many({"mobile": mobile})
+    
+    # Insert new OTP
+    await db.otps.insert_one({
+        "mobile": mobile,
+        "otp": otp_code,
+        "created_at": now,
+        "expires_at": expires_at
+    })
+    
+    print("\n" + "╔" + "═"*50 + "╗")
+    print(f"║ [OTP SENT] Mobile: {mobile:<15} Code: {otp_code} ║")
+    print("╚" + "═"*50 + "╝\n")
+    
+    return {"status": "success", "message": "OTP sent successfully"}
+
 @router.post("/verify-otp", response_model=VerifyOTPResponse)
 async def verify_otp(request: VerifyOTPRequest):
     print(f"\n--- 🔐 Login Attempt: {datetime.utcnow().isoformat()} ---")
@@ -45,22 +91,39 @@ async def verify_otp(request: VerifyOTPRequest):
                 detail="Database connection is currently unavailable. Please check your network and try again."
             )
             
-        print("📲 Verifying Firebase Token...")
-        try:
-            mobile_number = verify_id_token(request.firebase_token)
-            print(f"✅ Token Verified. Mobile: {mobile_number}")
-        except Exception as e:
-            print(f"❌ Token Verification Failed: {e}")
-            raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
+        mobile_number = request.mobile.strip().replace(" ", "")
+        if not mobile_number.startswith("+"):
+            mobile_number = "+91" + mobile_number
+            
+        otp_entered = request.otp.strip()
+        
+        print(f"📲 Verifying DB-backed OTP for {mobile_number}...")
+        
+        # Verify against our 'otps' collection
+        otp_record = await db.otps.find_one({
+            "mobile": mobile_number,
+            "otp": otp_entered,
+            "expires_at": {"$gt": datetime.utcnow()}
+        })
+        
+        if not otp_record:
+            print("❌ Invalid or expired OTP code")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired OTP code"
+            )
+            
+        # Delete OTP record to prevent reuse
+        await db.otps.delete_one({"_id": otp_record["_id"]})
+        print("✅ OTP verified and consumed.")
             
         print(f"🔍 Searching for user in collection 'users'...")
         try:
-            # Setting a 10s timeout for this find_one to prevent infinite hanging
             user = await db.users.find_one({"mobile": mobile_number})
             print(f"✅ Database search complete. Found: {bool(user)}")
         except Exception as db_err:
             print(f"❌ Database Search Error: {db_err}")
-            raise HTTPException(status_code=503, detail=f"Database search timed out or failed. Check your MongoDB connection. Detail: {str(db_err)}")
+            raise HTTPException(status_code=503, detail=f"Database search timed out or failed: {str(db_err)}")
             
         is_new_user = False
         
@@ -112,7 +175,6 @@ async def verify_otp(request: VerifyOTPRequest):
         )
 
     except HTTPException:
-        # Re-raise HTTPExceptions so FastAPI can handle them
         raise
     except Exception as global_err:
         print(f"🛑 CRITICAL ERROR in verify_otp: {global_err}")
@@ -142,6 +204,27 @@ async def complete_profile(request: ProfileCompleteRequest, current_user: UserRe
         {"$set": update_data}
     )
     
+    # If this is a patient, make sure there is a record in the 'patients' collection
+    if request.role == UserRole.patient:
+        existing_patient = await db.patients.find_one({"user_id": current_user.id})
+        if not existing_patient:
+            print(f"📝 Automatically creating patient profile for user_id: {current_user.id}")
+            patient_data = {
+                "user_id": current_user.id,
+                "name": request.name,
+                "date_of_birth": "2000-01-01",  # default
+                "gender": "other",              # default
+                "blood_group": None,
+                "allergies": [],
+                "district": request.district or "Chennai",
+                "state": "Tamil Nadu",          # default
+                "language": request.language or "en",
+                "abha_number": f"ABHA-{datetime.utcnow().strftime('%Y%m%d')}-{current_user.id[:4].upper()}",
+                "created_at": datetime.utcnow()
+            }
+            await db.patients.insert_one(patient_data)
+            print("✅ Patient profile created.")
+
     updated_user = await db.users.find_one({"_id": ObjectId(current_user.id)})
     user_id = str(updated_user.pop("_id"))
     updated_user["id"] = user_id

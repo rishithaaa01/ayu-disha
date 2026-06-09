@@ -13,20 +13,29 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSendOTP = (e) => {
+  const handleSendOTP = async (e) => {
     e.preventDefault();
     if (!phone || phone.length < 10) {
       setError('Enter a valid 10-digit mobile number');
       return;
     }
+    setLoading(true);
     setError('');
-    setStep(2);
+    
+    try {
+      await api.post('/auth/send-otp', { mobile: phone });
+      setStep(2);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to send OTP. Please check your connection.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleVerifyOTP = async (e) => {
     e.preventDefault();
-    if (otp !== '123456') {
-      setError('Invalid OTP. For development, use: 123456');
+    if (!otp || otp.length < 6) {
+      setError('Enter a valid 6-digit OTP');
       return;
     }
     
@@ -34,15 +43,15 @@ export default function Login() {
     setError('');
     
     try {
-      const mockFirebaseToken = `MOCK_${phone.replace('+91', '')}`;
       const res = await api.post('/auth/verify-otp', {
-        firebase_token: mockFirebaseToken,
+        mobile: phone,
+        otp: otp,
         language: 'en'
       });
       
       handleSuccessfulLogin(res.data);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Login failed');
+      setError(err.response?.data?.detail || 'Verification failed. Please check the OTP and try again.');
     } finally {
       setLoading(false);
     }
@@ -78,33 +87,6 @@ export default function Login() {
     }
   };
 
-  const devAutoLogin = async (role) => {
-    setLoading(true);
-    setError('');
-    let payload = {};
-    
-    if (role === 'patient') {
-      payload = { firebase_token: "MOCK_9999999999", name: "Priya Sharma", role: "patient", language: "en" };
-    } else if (role === 'asha') {
-      payload = { firebase_token: "MOCK_9876543210", name: "Kavitha Devi", role: "asha", language: "en" };
-    } else if (role === 'doctor') {
-      payload = { firebase_token: "MOCK_9876543211", name: "Dr. Ramesh Kumar", role: "doctor", language: "en" };
-    } else if (role === 'admin') {
-      payload = { firebase_token: "MOCK_9876543212", name: "Admin User", role: "admin", language: "en" };
-    } else if (role === 'pho') {
-      payload = { firebase_token: "MOCK_9876543213", name: "PHO Officer", role: "pho", language: "en" };
-    }
-
-    try {
-      const res = await api.post('/auth/verify-otp', payload);
-      handleSuccessfulLogin(res.data);
-    } catch (err) {
-      setError(`Dev Login Failed: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-[#F7F3EE] flex flex-col justify-center items-center p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden border border-[#E2DDD8]">
@@ -137,9 +119,10 @@ export default function Login() {
               </div>
               <button
                 type="submit"
-                className="w-full bg-[#1B6CA8] text-white py-4 rounded-lg font-bold text-lg hover:bg-[#155A8A] transition-colors shadow-md"
+                disabled={loading}
+                className="w-full bg-[#1B6CA8] text-white py-4 rounded-lg font-bold text-lg hover:bg-[#155A8A] transition-colors shadow-md disabled:opacity-50"
               >
-                Continue
+                {loading ? 'Sending...' : 'Continue'}
               </button>
             </form>
           ) : (
@@ -152,7 +135,7 @@ export default function Login() {
                   type="text"
                   value={otp}
                   onChange={(e) => setOtp(e.target.value)}
-                  placeholder="123456"
+                  placeholder="Enter 6-digit OTP"
                   className="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1B6CA8] focus:border-transparent outline-none transition-all text-center tracking-widest text-2xl font-bold"
                   maxLength={6}
                 />
@@ -173,51 +156,6 @@ export default function Login() {
               </button>
             </form>
           )}
-
-          <div className="mt-10 pt-8 border-t border-gray-100">
-            <p className="text-center text-sm text-gray-500 font-medium mb-4 uppercase tracking-wider">
-              Developer Quick Login
-            </p>
-            <div className="grid grid-cols-1 gap-3">
-              <button 
-                onClick={() => devAutoLogin('patient')}
-                className="flex items-center justify-center space-x-2 w-full bg-[#F7F3EE] text-[#D35400] hover:bg-[#F0E6D8] border border-[#E2DDD8] py-3 rounded-lg font-semibold transition-colors"
-              >
-                <UserCircle size={18} />
-                <span>Patient Login</span>
-              </button>
-              <button 
-                onClick={() => devAutoLogin('asha')}
-                className="flex items-center justify-center space-x-2 w-full bg-[#F7F3EE] text-[#1B6CA8] hover:bg-[#E6F0F7] border border-[#B3D4EC] py-3 rounded-lg font-semibold transition-colors"
-              >
-                <ShieldCheck size={18} />
-                <span>ASHA Login</span>
-              </button>
-              <button 
-                onClick={() => devAutoLogin('doctor')}
-                className="flex items-center justify-center space-x-2 w-full bg-[#F7F3EE] text-[#2C8C68] hover:bg-[#E5F5EF] border border-[#BDE0D1] py-3 rounded-lg font-semibold transition-colors"
-              >
-                <Activity size={18} />
-                <span>Doctor Login</span>
-              </button>
-              <div className="grid grid-cols-2 gap-3">
-                <button 
-                  onClick={() => devAutoLogin('admin')}
-                  className="flex items-center justify-center space-x-2 w-full bg-[#F7F3EE] text-[#7D3C98] hover:bg-[#F5EEF8] border border-[#D7BDE2] py-3 rounded-lg font-semibold transition-colors text-sm"
-                >
-                  <ShieldCheck size={16} />
-                  <span>Admin</span>
-                </button>
-                <button 
-                  onClick={() => devAutoLogin('pho')}
-                  className="flex items-center justify-center space-x-2 w-full bg-[#F7F3EE] text-[#1A5276] hover:bg-[#EBF5FB] border border-[#AED6F1] py-3 rounded-lg font-semibold transition-colors text-sm"
-                >
-                  <Activity size={16} />
-                  <span>PHO</span>
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>

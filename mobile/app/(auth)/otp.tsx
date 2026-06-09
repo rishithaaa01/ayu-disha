@@ -20,18 +20,16 @@ export default function OTPScreen() {
   }, []);
 
   const handleVerify = async () => {
-    if (otp !== '123456') {
-      alert("Invalid OTP. For development, use: 123456");
-      setLoading(false);
+    if (!otp || otp.length < 6) {
+      alert("Please enter a valid 6-digit OTP");
       return;
     }
 
     setLoading(true);
     try {
-      const mockFirebaseToken = `MOCK_${String(phone).replace('+91', '')}`;
-      
       const response = await api.post('/auth/verify-otp', {
-        firebase_token: mockFirebaseToken,
+        mobile: String(phone),
+        otp: otp,
         language: 'en'
       });
       
@@ -46,7 +44,7 @@ export default function OTPScreen() {
     } catch (e: any) {
       const errorMsg = e.response?.data?.detail || e.message || "Unknown Error";
       console.error("Login Error:", errorMsg);
-      alert(`Login Failed: ${errorMsg}\n\nCheck if your backend is running and the IP address in Config.ts is correct.`);
+      alert(`Login Failed: ${errorMsg}\n\nCheck if your backend is running, the IP address in Config.ts is correct, and you entered the correct OTP.`);
     } finally {
       setLoading(false);
     }
