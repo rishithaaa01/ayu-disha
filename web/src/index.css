@@ -4,6 +4,31 @@
 
 @layer base {
   body {
-    @apply bg-background text-gray-900;
+    @apply bg-[#F7F3EE] text-gray-900;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+}
+
+@layer utilities {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #E2DDD8;
+    border-radius: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #C5BFB8;
+  }
+
+  .font-mukta {
+    font-family: 'Mukta', 'Inter', system-ui, sans-serif;
   }
 }

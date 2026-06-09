@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import patientApi from '../../services/patientApi';
 import MedicineCard from '../../components/MedicineCard';
 import LoadingSkeleton from '../../components/LoadingSkeleton';
+import ReminderModal from '../../components/ReminderModal';
 import * as Notifications from 'expo-notifications'; // Placeholder for reminders
 
 export default function MedicinesScreen() {
@@ -11,6 +12,7 @@ export default function MedicinesScreen() {
   const [loading, setLoading] = useState(true);
   const [showPast, setShowPast] = useState(false);
   const [reminders, setReminders] = useState<{[key: string]: boolean}>({});
+  const [showReminderModal, setShowReminderModal] = useState(false);
 
   useEffect(() => {
     loadMedicines();
@@ -32,6 +34,14 @@ export default function MedicinesScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const toggleReminder = (id: string, value: boolean) => {
+    setReminders(prev => ({
+      ...prev,
+      [id]: value
+    }));
+    // Note: Actual notification scheduling would go here
   };
 
   const isRecent = (dateStr: string) => {
@@ -117,10 +127,19 @@ export default function MedicinesScreen() {
             )}
             
             <View style={{height: 20}} />
-            <TouchableOpacity style={styles.setReminderBtn}>
+            <TouchableOpacity 
+              style={styles.setReminderBtn} 
+              onPress={() => setShowReminderModal(true)}
+            >
               <Ionicons name="alarm-outline" size={20} color="#FFF" style={{marginRight: 8}} />
               <Text style={styles.setReminderText}>Set Custom Reminder</Text>
             </TouchableOpacity>
+
+            <ReminderModal 
+              visible={showReminderModal} 
+              onClose={() => setShowReminderModal(false)} 
+              medicines={prescriptions}
+            />
           </>
         )}
       </ScrollView>

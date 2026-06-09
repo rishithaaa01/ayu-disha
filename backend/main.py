@@ -32,17 +32,17 @@ app.add_middleware(
 # Radar Middleware: Capture everything
 @app.middleware("http")
 async def radar_middleware(request: Request, call_next):
-    print(f"📡 RADAR: {request.method} {request.url}")
+    print(f"[RADAR]: {request.method} {request.url}")
     # Debug: Print Auth Header
     auth = request.headers.get("Authorization", "MISSING")
     
     try:
         response = await call_next(request)
         if response.status_code >= 400:
-            print(f"⚠️ {response.status_code} DETECTED on {request.url.path}")
+            print(f"[WARNING] {response.status_code} DETECTED on {request.url.path}")
         return response
     except Exception as e:
-        print(f"🚨 RADAR CRASH: {str(e)}")
+        print(f"[CRASH] RADAR CRASH: {str(e)}")
         raise e
 
 # Registrer Routers: Priority Order
@@ -64,10 +64,10 @@ async def root():
 # Fallback to catch malformed URLs
 @app.api_route("/{path_name:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def catch_all(request: Request, path_name: str):
-    print(f"🕵️‍♂️ CATCH-ALL: Request reached {path_name} with method {request.method}")
+    print(f"[CATCH-ALL]: Request reached {path_name} with method {request.method}")
     return JSONResponse(
         status_code=404,
         content={"error": "Path not found", "path": path_name}
     )
 
-print("🚀 Ayu Disha Master Backend is Live")
+print("[START] Ayu Disha Master Backend is Live")

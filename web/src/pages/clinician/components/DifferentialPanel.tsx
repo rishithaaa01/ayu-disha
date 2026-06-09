@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Activity, FileSearch, ArrowRight } from 'lucide-react';
+import { Sparkles, Activity, FileSearch, ArrowRight, AlertTriangle } from 'lucide-react';
 
 interface DifferentialPanelProps {
   diagnoses: any[];
@@ -83,7 +83,3 @@ export default function DifferentialPanel({ diagnoses, isLoading, symptoms }: Di
     </div>
   );
 }
-
-// Just to avoid TypeScript error on AlertTriangle
-import { AlertTriangle as AlertTriangleIcon } from 'lucide-react';
-const AlertTriangle = AlertTriangleIcon;

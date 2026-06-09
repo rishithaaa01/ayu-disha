@@ -34,7 +34,7 @@ class VisitResponse(BaseModel):
     hospital_name: str = "Unknown Hospital"
     doctor_name: str = "Unknown Doctor"
     date: datetime
-    chief_complaint: str
+    chief_complaint: str = "No complaint recorded"
     diagnosis: List[str] = []
     prescriptions: List[Dict[str, Any]] = []
     follow_up_date: Optional[datetime] = None

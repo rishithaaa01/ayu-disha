@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import api from '../../services/clinicianApi';
+import api from '../../../services/clinicianApi';
 import PatientHeader from './PatientHeader';
 import AISummaryCard from './AISummaryCard';
 import LoadingSkeleton from './LoadingSkeleton';
@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
-import { useClinicianStore } from '../../store/clinicianStore';
+import { useClinicianStore } from '../../../store/clinicianStore';
 
 interface PatientRecordPanelProps {
   patientId: string;
