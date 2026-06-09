@@ -4,6 +4,7 @@ import Login from './pages/Login';
 import ClinicianApp from './pages/clinician/ClinicianApp';
 import AdminDashboard from './pages/admin/Dashboard';
 import PHODashboard from './pages/pho/Dashboard';
+import AshaDashboard from './pages/asha/Dashboard';
 import PatientDashboard from './pages/patient/PatientDashboard';
 import HealthRecords from './pages/patient/HealthRecords';
 import Medicines from './pages/patient/Medicines';
@@ -92,6 +93,16 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['pho']}>
               <PHODashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ASHA routes */}
+        <Route
+          path="/asha/*"
+          element={
+            <ProtectedRoute allowedRoles={['asha']}>
+              <AshaDashboard />
             </ProtectedRoute>
           }
         />

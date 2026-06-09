@@ -11,8 +11,10 @@ from jose import jwt
 from bson import ObjectId
 import random
 from services.sms_service import sms_service
+from passlib.context import CryptContext
 
 router = APIRouter()
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class SendOTPRequest(BaseModel):
     mobile: str
@@ -29,6 +31,29 @@ class VerifyOTPResponse(BaseModel):
     user: UserResponse
     is_new_user: bool
     needs_registration: bool
+
+class UserRegisterRequest(BaseModel):
+    email: str
+    password: str
+    name: str
+    mobile: str
+    role: UserRole
+    language: str = "en"
+    district: Optional[str] = None
+    hospital: Optional[str] = None
+    village: Optional[str] = None
+
+class UserLoginRequest(BaseModel):
+    email: str
+    password: str
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    code: str
+    new_password: str
 
 def create_access_token(data: dict):
     to_encode = data.copy()
@@ -283,3 +308,202 @@ async def refresh_token(current_user: UserResponse = Depends(get_current_user)):
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: UserResponse = Depends(get_current_user)):
     return current_user
+
+@router.post("/register", response_model=VerifyOTPResponse)
+async def register(request: UserRegisterRequest):
+    print(f"\n--- 📝 Registration Attempt: {datetime.utcnow().isoformat()} ---")
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database connection is currently unavailable.")
+        
+    email_clean = request.email.strip().lower()
+    mobile_clean = request.mobile.strip().replace(" ", "")
+    if not mobile_clean.startswith("+"):
+        mobile_clean = "+91" + mobile_clean
+
+    # Check unique email
+    existing_email = await db.users.find_one({"email": email_clean})
+    if existing_email:
+        raise HTTPException(status_code=400, detail="A user with this email already exists.")
+
+    # Check unique mobile
+    existing_mobile = await db.users.find_one({"mobile": mobile_clean})
+    if existing_mobile:
+        raise HTTPException(status_code=400, detail="A user with this mobile number already exists.")
+
+    # Hash the password
+    password_hash = pwd_context.hash(request.password)
+
+    new_user_data = {
+        "email": email_clean,
+        "password_hash": password_hash,
+        "name": request.name.strip(),
+        "mobile": mobile_clean,
+        "role": request.role.value,
+        "language": request.language,
+        "district": request.district or "Chennai",
+        "hospital": request.hospital,
+        "village": request.village,
+        "is_profile_complete": True,
+        "created_at": datetime.utcnow()
+    }
+
+    try:
+        result = await db.users.insert_one(new_user_data)
+        user_id = str(result.inserted_id)
+        new_user_data["id"] = user_id
+        
+        # If user registers as a patient, sync patient collection
+        if request.role == UserRole.patient:
+            patient_data = {
+                "user_id": user_id,
+                "name": request.name.strip(),
+                "date_of_birth": "2000-01-01",
+                "gender": "other",
+                "blood_group": None,
+                "allergies": [],
+                "district": request.district or "Chennai",
+                "state": "Tamil Nadu",
+                "language": request.language or "en",
+                "abha_number": f"ABHA-{datetime.utcnow().strftime('%Y%m%d')}-{user_id[:4].upper()}",
+                "created_at": datetime.utcnow()
+            }
+            await db.patients.insert_one(patient_data)
+            print("✅ Linked Patient profile created.")
+
+        new_user_data.pop("password_hash", None)
+        user_response = UserResponse(**new_user_data)
+        
+    except Exception as ins_err:
+        print(f"❌ User Registration Failed: {ins_err}")
+        raise HTTPException(status_code=500, detail=f"Failed to create user record: {str(ins_err)}")
+
+    print(f"✅ User registered and profile completed. ID: {user_id}")
+    access_token = create_access_token({"sub": user_id, "role": request.role.value})
+    
+    return VerifyOTPResponse(
+        access_token=access_token,
+        user=user_response,
+        is_new_user=True,
+        needs_registration=False
+    )
+
+@router.post("/login", response_model=VerifyOTPResponse)
+async def login(request: UserLoginRequest):
+    print(f"\n--- 🔑 Credentials Login Attempt: {datetime.utcnow().isoformat()} ---")
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database connection is currently unavailable.")
+
+    email_clean = request.email.strip().lower()
+
+    # Search user by email, or fall back to searching by mobile
+    user = await db.users.find_one({"email": email_clean})
+    if not user:
+        # Fallback search if they entered their mobile number in the email field
+        mobile_clean = email_clean.replace(" ", "")
+        if not mobile_clean.startswith("+"):
+            mobile_clean = "+91" + mobile_clean
+        user = await db.users.find_one({"mobile": mobile_clean})
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
+
+    if "password_hash" not in user or not user["password_hash"]:
+        raise HTTPException(
+            status_code=400, 
+            detail="Your account does not have a password set. Please log in using Phone OTP."
+        )
+
+    # Verify password
+    if not pwd_context.verify(request.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
+
+    user_id = str(user.pop("_id"))
+    user["id"] = user_id
+    user.pop("password_hash", None)
+
+    if "is_profile_complete" not in user:
+        user["is_profile_complete"] = True if user.get("name") and user.get("role") else False
+    if "created_at" not in user:
+        user["created_at"] = datetime.utcnow()
+
+    user_response = UserResponse(**user)
+    
+    role_value = str(user_response.role.value) if user_response.role else "none"
+    access_token = create_access_token({"sub": user_id, "role": role_value})
+    
+    print(f"✅ Credentials login success for user: {user_id}")
+    return VerifyOTPResponse(
+        access_token=access_token,
+        user=user_response,
+        is_new_user=False,
+        needs_registration=not user_response.is_profile_complete
+    )
+
+@router.post("/forgot-password")
+async def forgot_password(request: ForgotPasswordRequest):
+    print(f"\n--- 🔔 Forgot Password Request: {datetime.utcnow().isoformat()} ---")
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database connection is currently unavailable.")
+
+    email_clean = request.email.strip().lower()
+    user = await db.users.find_one({"email": email_clean})
+    if not user:
+        return {"status": "success", "message": "If this email is registered, you will receive a reset code."}
+
+    # Generate 6-digit reset code
+    reset_code = f"{random.randint(100000, 999999)}"
+    now = datetime.utcnow()
+    expires_at = now + timedelta(minutes=15)
+
+    await db.password_resets.delete_many({"email": email_clean})
+    await db.password_resets.insert_one({
+        "email": email_clean,
+        "code": reset_code,
+        "created_at": now,
+        "expires_at": expires_at
+    })
+
+    print("\n" + "╔" + "═"*50 + "╗")
+    print("║             [PASSWORD RESET CODE]                ║")
+    print(f"║ Email: {email_clean:<21} Code: {reset_code:<15} ║")
+    print("║ Valid for 15 minutes                             ║")
+    print("╚" + "═"*50 + "╝\n")
+
+    return {
+        "status": "success", 
+        "message": "Password reset code sent. Please check your console logs or email."
+    }
+
+@router.post("/reset-password")
+async def reset_password(request: ResetPasswordRequest):
+    print(f"\n--- 🔑 Reset Password: {datetime.utcnow().isoformat()} ---")
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database connection is currently unavailable.")
+
+    email_clean = request.email.strip().lower()
+    code_entered = request.code.strip()
+
+    reset_record = await db.password_resets.find_one({
+        "email": email_clean,
+        "code": code_entered,
+        "expires_at": {"$gt": datetime.utcnow()}
+    })
+
+    if not reset_record:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset code.")
+
+    new_password_hash = pwd_context.hash(request.new_password)
+
+    await db.users.update_one(
+        {"email": email_clean},
+        {"$set": {"password_hash": new_password_hash}}
+    )
+
+    await db.password_resets.delete_one({"_id": reset_record["_id"]})
+
+    print(f"✅ Password reset successfully for: {email_clean}")
+    return {"status": "success", "message": "Password reset successfully. You can now log in."}

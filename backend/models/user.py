@@ -20,6 +20,7 @@ class UserCreate(BaseModel):
 class UserResponse(BaseModel):
     id: str
     name: Optional[str] = None
+    email: Optional[str] = None
     mobile: str
     role: Optional[UserRole] = None
     language: str = "en"
