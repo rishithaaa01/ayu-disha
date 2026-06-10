@@ -232,14 +232,34 @@ async def get_patient_record(patient_id: str, current_user: UserResponse = Depen
     }
     
     if consent:
-        # 3. Fetch ASHA details for "Loop Reflection"
+        # 3. Fetch full visit history
+        visits_cursor = db.visits.find({"patient_id": patient_id}).sort("date", -1).limit(20)
+        visits_raw = await visits_cursor.to_list(20)
+        formatted_visits = []
+        current_meds = []
+        for v in visits_raw:
+            v["_id"] = str(v["_id"])
+            formatted_visits.append(v)
+            # Collect active prescriptions from the most recent visit
+            if not current_meds and v.get("prescriptions"):
+                current_meds = v["prescriptions"]
+
+        # 4. Fetch lab results
+        labs_cursor = db.lab_orders.find({"patient_id": patient_id}).sort("ordered_date", -1).limit(20)
+        labs_raw = await labs_cursor.to_list(20)
+        formatted_labs = []
+        for l in labs_raw:
+            l["_id"] = str(l["_id"])
+            formatted_labs.append(l)
+
+        # 5. Fetch ASHA details for "Loop Reflection"
         active_referral = await db.referrals.find_one({
             "patient_id": patient_id,
             "status": {"$in": ["pending", "accepted"]}
         })
         if active_referral:
             active_referral["id"] = str(active_referral.pop("_id"))
-            
+
         asha_history_cursor = db.asha_visits.find({"member_id": patient_id}).sort("created_at", -1).limit(3)
         asha_history = await asha_history_cursor.to_list(3)
         for ah in asha_history:
