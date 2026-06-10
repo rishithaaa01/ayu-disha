@@ -10,8 +10,9 @@ class EmailService:
             print("⚠️ SMTP credentials not fully configured. Reset code printed to console only.")
             return False
 
-        # Run SMTP sending in a background thread to prevent blocking the event loop
-        return await asyncio.to_thread(self._send_email_sync, to_email, reset_code)
+        # Run SMTP sending in a background thread to prevent blocking the event loop (compatible with Python 3.7+)
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._send_email_sync, to_email, reset_code)
 
     def _send_email_sync(self, to_email: str, reset_code: str) -> bool:
         try:
@@ -48,8 +49,8 @@ class EmailService:
             message.attach(part1)
             message.attach(part2)
 
-            # Connect and send
-            with smtplib.SMTP(settings.smtp_host, settings.smtp_port or 587) as server:
+            # Connect and send with a 10s timeout
+            with smtplib.SMTP(settings.smtp_host, settings.smtp_port or 587, timeout=10.0) as server:
                 server.starttls()
                 server.login(settings.smtp_username, settings.smtp_password)
                 server.sendmail(sender_email, to_email, message.as_string())
