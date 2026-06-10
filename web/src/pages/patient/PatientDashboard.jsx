@@ -4,10 +4,12 @@ import { Link } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import patientApi from '../../services/patientApi';
 import Navbar from '../../components/Navbar';
-import { FileText, Pill, FlaskConical, ShieldCheck, Sparkles, RefreshCw, AlertCircle, Calendar } from 'lucide-react';
+import { FileText, Pill, FlaskConical, ShieldCheck, Sparkles, RefreshCw, AlertCircle, Calendar, Activity } from 'lucide-react';
+import VoiceSymptomLogger from './components/VoiceSymptomLogger';
 
 export default function PatientDashboard() {
   const { user } = useAuthStore();
+  const [showSymptomLogger, setShowSymptomLogger] = useState(false);
 
   const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ['patientProfile'],
@@ -31,6 +33,7 @@ export default function PatientDashboard() {
     : null;
 
   const quickLinks = [
+    { id: 'log_symptoms', label: 'Log Symptoms', icon: Activity, color: 'bg-red-50 text-red-600 border-red-100', action: () => setShowSymptomLogger(true) },
     { to: '/patient/records', label: 'My Records', icon: FileText, color: 'bg-blue-50 text-blue-600 border-blue-100' },
     { to: '/patient/medicines', label: 'Medicines', icon: Pill, color: 'bg-purple-50 text-purple-600 border-purple-100' },
     { to: '/patient/tests', label: 'Lab Tests', icon: FlaskConical, color: 'bg-orange-50 text-orange-600 border-orange-100' },
@@ -115,19 +118,35 @@ export default function PatientDashboard() {
         </div>
 
         {/* Quick Links Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          {quickLinks.map(({ to, label, icon: Icon, color }) => (
-            <Link
-              key={to}
-              to={to}
-              className={`flex flex-col items-center justify-center p-5 rounded-2xl border bg-white hover:shadow-md transition-all space-y-3 group`}
-            >
-              <div className={`p-3 rounded-xl ${color}`}>
-                <Icon size={22} />
-              </div>
-              <span className="text-sm font-semibold text-gray-700 group-hover:text-[#1B6CA8] transition-colors">{label}</span>
-            </Link>
-          ))}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+          {quickLinks.map(({ to, id, label, icon: Icon, color, action }) => {
+            const inner = (
+              <>
+                <div className={`p-3 rounded-xl ${color}`}>
+                  <Icon size={22} />
+                </div>
+                <span className="text-sm font-semibold text-gray-700 group-hover:text-[#1B6CA8] transition-colors">{label}</span>
+              </>
+            );
+
+            return to ? (
+              <Link
+                key={to}
+                to={to}
+                className="flex flex-col items-center justify-center p-5 rounded-2xl border bg-white hover:shadow-md transition-all space-y-3 group"
+              >
+                {inner}
+              </Link>
+            ) : (
+              <button
+                key={id}
+                onClick={action}
+                className="flex flex-col items-center justify-center p-5 rounded-2xl border bg-white hover:shadow-md transition-all space-y-3 group w-full h-full"
+              >
+                {inner}
+              </button>
+            );
+          })}
         </div>
 
         {/* Recent Visit */}
@@ -155,6 +174,15 @@ export default function PatientDashboard() {
         )}
         {visitsLoading && <div className="h-36 bg-gray-200 animate-pulse rounded-2xl" />}
       </div>
+
+      {showSymptomLogger && (
+        <VoiceSymptomLogger
+          onClose={() => setShowSymptomLogger(false)}
+          onLogSuccess={(data) => {
+            refetchSummary();
+          }}
+        />
+      )}
     </div>
   );
 }

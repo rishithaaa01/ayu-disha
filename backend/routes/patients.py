@@ -217,3 +217,105 @@ async def revoke_consent(consent_id: str, current_user: UserResponse = Depends(g
         raise HTTPException(status_code=404, detail="Consent not found or already revoked.")
         
     return {"message": "Consent revoked successfully"}
+
+from pydantic import BaseModel
+import json
+
+class SymptomLogRequest(BaseModel):
+    transcript: str
+    preferred_hospital_id: str = "Govt General Hospital Chennai"
+
+@router.post("/me/symptoms")
+async def log_symptoms(req: SymptomLogRequest, current_user: UserResponse = Depends(get_current_user)):
+    db = get_database()
+    patient = await db.patients.find_one({"user_id": current_user.id})
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient profile not found.")
+        
+    patient_id = str(patient["_id"])
+    
+    prompt = f"""
+    You are a clinical AI assistant triage agent. 
+    Based on the patient's self-reported symptoms, classify their risk level.
+    
+    Patient: {patient.get('name', 'Unknown')}
+    Symptoms: {req.transcript}
+    
+    Respond in this exact JSON format:
+    {{
+      "risk_level": "LOW",
+      "reasoning": "one short sentence explaining why",
+      "recommendation": "one specific action for the patient to take right now",
+      "refer_to_doctor": false
+    }}
+    
+    Possible risk_level values: LOW, WATCH, URGENT, SEVERE
+    LOW = manageable at home with basic care
+    WATCH = needs monitoring, see doctor if worsens
+    URGENT = needs doctor within 24 hours
+    SEVERE = go to emergency immediately
+    """
+    
+    groq_api_key = settings.groq_api_key
+    
+    result_json = {
+        "risk_level": "WATCH",
+        "reasoning": "Unable to reach AI for analysis.",
+        "recommendation": "Please consult a doctor.",
+        "refer_to_doctor": True
+    }
+    
+    if groq_api_key:
+        try:
+            client = AsyncGroq(api_key=groq_api_key)
+            completion = await client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model="llama-3.1-8b-instant",
+                temperature=0.1,
+                response_format={"type": "json_object"}
+            )
+            result_str = completion.choices[0].message.content.strip()
+            result_json = json.loads(result_str)
+        except Exception as e:
+            print(f"Groq API Error: {str(e)}")
+            
+    risk_level = result_json.get("risk_level", "WATCH")
+    refer_to_doctor = result_json.get("refer_to_doctor", False)
+    
+    # Force referral if severe
+    if risk_level in ["URGENT", "SEVERE"]:
+        refer_to_doctor = True
+        
+    # Auto-Refer
+    if refer_to_doctor:
+        ref_dict = {
+            "patient_id": patient_id,
+            "to_hospital_id": req.preferred_hospital_id,
+            "urgency": "Immediate" if risk_level == "SEVERE" else "Today",
+            "from_worker_id": current_user.id,
+            "from_worker_name": current_user.name,
+            "asha_observations": f"Self-reported: {req.transcript}",
+            "ai_summary": result_json.get("reasoning", ""),
+            "created_at": datetime.utcnow(),
+            "status": "pending",
+            "asha_id": "SELF"
+        }
+        ref_res = await db.referrals.insert_one(ref_dict)
+        
+        await db.visits.insert_one({
+            "patient_id": patient_id,
+            "hospital_id": req.preferred_hospital_id,
+            "date": datetime.utcnow(),
+            "created_at": datetime.utcnow(),
+            "chief_complaint": f"Self Referral: {req.transcript[:100]}...",
+            "status": "in_queue",
+            "appointment_type": "referred",
+            "risk_tag": "urgent" if risk_level in ["URGENT", "SEVERE"] else "normal",
+            "referred_by": "Self (AI Triage)",
+            "referral_id": str(ref_res.inserted_id),
+            "diagnosis": [],
+            "prescriptions": []
+        })
+        
+    result_json["offline_saved"] = False
+    return result_json
