@@ -10,8 +10,8 @@ class SMSService:
         # Clean mobile number
         mobile_clean = mobile.strip().replace(" ", "")
         
-        # 1. Try Twilio if configured
-        if settings.twilio_account_sid and settings.twilio_auth_token and settings.twilio_from_number:
+        # 1. Try Twilio if configured (disabled in debug mode to prevent slow/hanging cloud timeouts)
+        if not settings.debug and settings.twilio_account_sid and settings.twilio_auth_token and settings.twilio_from_number:
             print(f"📡 Attempting to send OTP via Twilio to {mobile_clean}...")
             url = f"https://api.twilio.com/2010-04-01/Accounts/{settings.twilio_account_sid}/Messages.json"
             auth = (settings.twilio_account_sid, settings.twilio_auth_token)
@@ -22,7 +22,7 @@ class SMSService:
             }
             try:
                 async with httpx.AsyncClient() as client:
-                    response = await client.post(url, data=data, auth=auth, timeout=10.0)
+                    response = await client.post(url, data=data, auth=auth, timeout=3.0)
                     res_json = response.json()
                     if response.status_code == 201:
                         print(f"✅ OTP sent via Twilio to {mobile_clean}")
@@ -31,9 +31,9 @@ class SMSService:
                         print(f"❌ Twilio API error: {res_json}")
             except Exception as e:
                 print(f"❌ Twilio communication error: {e}")
-
-        # 2. Try Fast2SMS if configured
-        if settings.fast2sms_api_key:
+ 
+        # 2. Try Fast2SMS if configured (disabled in debug mode to prevent slow/hanging cloud timeouts)
+        if not settings.debug and settings.fast2sms_api_key:
             print(f"📡 Attempting to send OTP via Fast2SMS (OTP Route) to {mobile_clean}...")
             # Fast2SMS requires 10 digit number (remove +91 prefix)
             number = mobile_clean.replace("+91", "")
@@ -49,7 +49,7 @@ class SMSService:
             }
             try:
                 async with httpx.AsyncClient() as client:
-                    response = await client.post(url, json=payload, headers=headers, timeout=10.0)
+                    response = await client.post(url, json=payload, headers=headers, timeout=3.0)
                     res_json = response.json()
                     if res_json.get("return") is True:
                         print(f"✅ OTP sent via Fast2SMS (OTP Route) to {mobile_clean}")
@@ -62,7 +62,7 @@ class SMSService:
                         "message": f"Your Ayu Disha verification code is {otp}. Valid for 5 minutes.",
                         "numbers": number
                     }
-                    response_q = await client.post(url, json=payload_quick, headers=headers, timeout=10.0)
+                    response_q = await client.post(url, json=payload_quick, headers=headers, timeout=3.0)
                     res_q_json = response_q.json()
                     if res_q_json.get("return") is True:
                         print(f"✅ OTP sent via Fast2SMS (Quick SMS Route) to {mobile_clean}")
