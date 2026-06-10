@@ -1,36 +1,37 @@
 import os
-from faster_whisper import WhisperModel
-
+from groq import AsyncGroq
+from config import settings
 
 class TranscriptionService:
-    def __init__(self, model_size="base"):
-        self.model = None
-        self.model_size = model_size
-
-    def load_model(self):
-        if self.model is None:
-            print("Loading Whisper model...")
-            self.model = WhisperModel(
-                self.model_size,
-                device="cpu",
-                compute_type="int8"
-            )
-            print("Whisper model loaded.")
-
-    async def transcribe(self, audio_path: str):
+    async def transcribe(self, audio_path: str) -> str:
+        """
+        Transcribes the audio file asynchronously using Groq API (Whisper model).
+        This replaces the heavy local faster-whisper model to allow lightweight
+        and fast server hosting (e.g. on Render free tier).
+        """
+        if not settings.groq_api_key:
+            print("❌ Groq API key is missing in settings!")
+            return "Error: Groq API key not configured on the server."
+            
         try:
-            self.load_model()
-
-            segments, info = self.model.transcribe(
-                audio_path,
-                beam_size=5
-            )
-
-            return " ".join(segment.text for segment in segments)
-
+            client = AsyncGroq(api_key=settings.groq_api_key)
+            
+            # Extract base filename
+            filename = os.path.basename(audio_path)
+            
+            print(f"📡 Sending audio {filename} to Groq API for transcription...")
+            with open(audio_path, "rb") as file:
+                transcription = await client.audio.transcriptions.create(
+                    file=(filename, file.read()),
+                    model="whisper-large-v3-turbo",
+                    response_format="json",
+                )
+                
+            print("✅ Transcription completed via Groq.")
+            return transcription.text
+            
         except Exception as e:
-            print(e)
-            return f"Error: {e}"
-
+            print(f"❌ Groq Transcription Error: {e}")
+            return f"Error transcribing audio: {str(e)}"
 
 transcription_service = TranscriptionService()
