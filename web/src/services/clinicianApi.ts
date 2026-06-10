@@ -5,6 +5,7 @@ const API_URL = `${import.meta.env.VITE_API_URL || 'https://ayu-disha.onrender.c
 
 const clinicianApi = axios.create({
   baseURL: API_URL,
+  timeout: 15000,
 });
 
 // Interceptor: This automatically grabs the JWT token from storage 

@@ -5,6 +5,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'https://ayu-disha.onrender.com/
 
 const api = axios.create({
   baseURL: API_URL,
+  timeout: 15000,
 });
 
 api.interceptors.request.use((config) => {
