@@ -7,12 +7,7 @@ import {
   Shield, Sparkles, ChevronLeft, ArrowRight, User, Plus,
   Phone, Lock, RefreshCw, CheckCircle2, Languages, MapPin, Mail, Key
 } from 'lucide-react';
-import { 
-  auth, 
-  isFirebaseConfigured, 
-  RecaptchaVerifier, 
-  signInWithPhoneNumber 
-} from '../services/firebase';
+// Authentication is purely JWT-based — no Firebase dependency
 
 export default function Login() {
   const navigate = useNavigate();
@@ -37,9 +32,7 @@ export default function Login() {
   const [countdown, setCountdown] = useState(0);
   const [canResend, setCanResend] = useState(false);
 
-  // Firebase Recaptcha
-  const [confirmationResult, setConfirmationResult] = useState(null);
-  const [recaptchaVerifier, setRecaptchaVerifier] = useState(null);
+  // (No Firebase state needed — OTP is handled by backend)
 
   // Register state
   const [regName, setRegName] = useState('');
@@ -60,23 +53,6 @@ export default function Login() {
   // Metadata
   const [hospitals, setHospitals] = useState([]);
   const [villages, setVillages] = useState([]);
-
-  // Initialize Recaptcha if Firebase is active
-  useEffect(() => {
-    if (isFirebaseConfigured && auth && !recaptchaVerifier) {
-      try {
-        const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-          size: 'invisible',
-          callback: () => {
-            console.log('Recaptcha resolved');
-          }
-        });
-        setRecaptchaVerifier(verifier);
-      } catch (err) {
-        console.error('Recaptcha initialization failed', err);
-      }
-    }
-  }, [recaptchaVerifier]);
 
   // Load hospitals & villages on startup
   useEffect(() => {
@@ -231,45 +207,27 @@ export default function Login() {
     }
   };
 
-  // Phone OTP Flow
+  // Phone OTP Flow — purely backend/JWT based
   const triggerSendOTP = async (formattedPhone) => {
     setLoading(true);
     setError('');
     setSuccessMsg('');
-    if (isFirebaseConfigured && auth && recaptchaVerifier) {
-      try {
-        console.log('Sending OTP via Firebase...');
-        const confirmation = await signInWithPhoneNumber(auth, formattedPhone, recaptchaVerifier);
-        setConfirmationResult(confirmation);
-        setSuccessMsg('OTP sent to your phone via Firebase!');
-        setCountdown(60);
-        setCanResend(false);
-        setStep(2);
-      } catch (err) {
-        console.error('Firebase Auth Error:', err);
-        setError(`Firebase failed to send OTP: ${err.message}. Check your console.`);
-      } finally {
-        setLoading(false);
+    try {
+      const res = await api.post('/auth/send-otp', { mobile: formattedPhone });
+      let msg = res.data.message || 'OTP sent successfully!';
+      if (res.data.otp) {
+        msg += ` [DEV MODE - OTP: ${res.data.otp}]`;
+      } else {
+        msg += ' (Check server console logs)';
       }
-    } else {
-      try {
-        console.log('Sending OTP via custom DB flow...');
-        const res = await api.post('/auth/send-otp', { mobile: formattedPhone });
-        let msg = res.data.message || 'OTP sent successfully!';
-        if (res.data.otp) {
-          msg += ` [DEV MODE - OTP: ${res.data.otp}]`;
-        } else {
-          msg += ' (Check server console logs)';
-        }
-        setSuccessMsg(msg);
-        setCountdown(60);
-        setCanResend(false);
-        setStep(2);
-      } catch (err) {
-        setError(err.response?.data?.detail || 'Failed to send OTP. Please check your connection.');
-      } finally {
-        setLoading(false);
-      }
+      setSuccessMsg(msg);
+      setCountdown(60);
+      setCanResend(false);
+      setStep(2);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to send OTP. Please check your connection.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -304,21 +262,12 @@ export default function Login() {
     setError('');
     const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
     try {
-      let payload = {};
-      if (confirmationResult) {
-        console.log('Verifying OTP via Firebase...');
-        const userCredential = await confirmationResult.confirm(otpString);
-        const firebaseToken = await userCredential.user.getIdToken();
-        payload = { firebase_token: firebaseToken, language: regLanguage };
-      } else {
-        console.log('Verifying OTP via custom DB flow...');
-        payload = { mobile: formattedPhone, otp: otpString, language: regLanguage };
-      }
+      const payload = { mobile: formattedPhone, otp: otpString, language: regLanguage };
       const res = await api.post('/auth/verify-otp', payload);
-      
+
       setTempToken(res.data.access_token);
       api.defaults.headers.common['Authorization'] = `Bearer ${res.data.access_token}`;
-      
+
       if (res.data.needs_registration) {
         setRegPhone(formattedPhone);
         setStep(5);
@@ -437,7 +386,6 @@ export default function Login() {
       <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-[#1B6CA8]/5 blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-orange-600/5 blur-[120px] pointer-events-none" />
       
-      <div id="recaptcha-container"></div>
 
       <div className="w-full max-w-5xl bg-white rounded-3xl shadow-[0_20px_50px_rgba(27,108,168,0.08)] overflow-hidden border border-gray-100/80 transition-all duration-300 grid grid-cols-1 md:grid-cols-12 min-h-[600px]">
         
