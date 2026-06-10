@@ -34,7 +34,7 @@ class SMSService:
 
         # 2. Try Fast2SMS if configured
         if settings.fast2sms_api_key:
-            print(f"📡 Attempting to send OTP via Fast2SMS to {mobile_clean}...")
+            print(f"📡 Attempting to send OTP via Fast2SMS (OTP Route) to {mobile_clean}...")
             # Fast2SMS requires 10 digit number (remove +91 prefix)
             number = mobile_clean.replace("+91", "")
             url = "https://www.fast2sms.com/dev/bulkV2"
@@ -52,10 +52,23 @@ class SMSService:
                     response = await client.post(url, json=payload, headers=headers, timeout=10.0)
                     res_json = response.json()
                     if res_json.get("return") is True:
-                        print(f"✅ OTP sent via Fast2SMS to {mobile_clean}")
+                        print(f"✅ OTP sent via Fast2SMS (OTP Route) to {mobile_clean}")
+                        return {"status": "success", "provider": "fast2sms"}
+                    
+                    # If OTP route fails (e.g. website verification needed), try Quick SMS fallback
+                    print(f"⚠️ Fast2SMS OTP route failed: {res_json}. Trying Quick SMS route...")
+                    payload_quick = {
+                        "route": "q",
+                        "message": f"Your Ayu Disha verification code is {otp}. Valid for 5 minutes.",
+                        "numbers": number
+                    }
+                    response_q = await client.post(url, json=payload_quick, headers=headers, timeout=10.0)
+                    res_q_json = response_q.json()
+                    if res_q_json.get("return") is True:
+                        print(f"✅ OTP sent via Fast2SMS (Quick SMS Route) to {mobile_clean}")
                         return {"status": "success", "provider": "fast2sms"}
                     else:
-                        print(f"❌ Fast2SMS API error: {res_json}")
+                        print(f"❌ Fast2SMS Quick SMS route failed: {res_q_json}")
             except Exception as e:
                 print(f"❌ Fast2SMS communication error: {e}")
 

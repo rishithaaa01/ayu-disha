@@ -25,6 +25,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [tempToken, setTempToken] = useState('');
 
   // Password Credentials State
   const [email, setEmail] = useState('');
@@ -254,7 +255,13 @@ export default function Login() {
       try {
         console.log('Sending OTP via custom DB flow...');
         const res = await api.post('/auth/send-otp', { mobile: formattedPhone });
-        setSuccessMsg(res.data.message || 'OTP sent successfully! (Check server console logs)');
+        let msg = res.data.message || 'OTP sent successfully!';
+        if (res.data.otp) {
+          msg += ` [DEV MODE - OTP: ${res.data.otp}]`;
+        } else {
+          msg += ' (Check server console logs)';
+        }
+        setSuccessMsg(msg);
         setCountdown(60);
         setCanResend(false);
         setStep(2);
@@ -309,12 +316,14 @@ export default function Login() {
       }
       const res = await api.post('/auth/verify-otp', payload);
       
+      setTempToken(res.data.access_token);
+      api.defaults.headers.common['Authorization'] = `Bearer ${res.data.access_token}`;
+      
       if (res.data.needs_registration) {
-        // Fallback redirection to complete-profile logic if registered only via phone number
         setRegPhone(formattedPhone);
-        setActiveTab('register');
-        setStep(1);
-        setError('Verification successful! Please complete your registration details to continue.');
+        setStep(5);
+        setError('');
+        setSuccessMsg('Phone verified! Please complete your profile details below.');
       } else {
         handleSuccessfulLogin(res.data.user, res.data.access_token);
       }
@@ -367,6 +376,48 @@ export default function Login() {
       setLoginMethod('password');
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to reset password. Check the code.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCompleteProfile = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    setSuccessMsg('');
+
+    if (regRole === 'doctor' && !regHospital) {
+      setError('Please select your hospital');
+      setLoading(false);
+      return;
+    }
+    if (regRole === 'asha' && !regVillage) {
+      setError('Please select your assigned village');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const payload = {
+        name: regName.trim(),
+        role: regRole,
+        language: regLanguage,
+        district: regDistrict,
+        hospital: regRole === 'doctor' ? regHospital : null,
+        village: regRole === 'asha' ? regVillage : null
+      };
+      
+      const token = tempToken || useAuthStore.getState().token;
+      const res = await api.post('/auth/complete-profile', payload, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      setSuccessMsg('Profile completed successfully!');
+      handleSuccessfulLogin(res.data, token);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to complete profile registration.');
     } finally {
       setLoading(false);
     }
@@ -1002,6 +1053,171 @@ export default function Login() {
                   className="w-full text-center text-gray-400 font-semibold text-xs hover:underline"
                 >
                   Resend Code
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* STEP 5: COMPLETE PROFILE ONBOARDING */}
+          {step === 5 && (
+            <form onSubmit={handleCompleteProfile} className="space-y-4 animate-fadeIn max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar">
+              <div>
+                <h3 className="text-xl font-extrabold text-gray-800">Complete Your Profile</h3>
+                <p className="text-gray-400 text-xs mt-1">Set up your health portal details to access your dashboard.</p>
+              </div>
+
+              {/* Name */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500">Full Name</label>
+                <div className="relative flex items-center border border-gray-300 rounded-xl bg-white focus-within:ring-2 focus-within:ring-[#1B6CA8] overflow-hidden">
+                  <div className="pl-4 text-gray-400">
+                    <User size={16} />
+                  </div>
+                  <input
+                    type="text"
+                    value={regName}
+                    onChange={(e) => setRegName(e.target.value)}
+                    placeholder="e.g. Ramesh Kumar"
+                    className="w-full p-3.5 pl-3 outline-none text-sm text-gray-700"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Role Selection */}
+              <div className="space-y-2.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500">Your Health Role</label>
+                <div className="grid grid-cols-1 gap-2">
+                  {roles.map((r) => {
+                    const Icon = r.icon;
+                    const isSelected = regRole === r.id;
+                    return (
+                      <div
+                        key={r.id}
+                        onClick={() => {
+                          setRegRole(r.id);
+                          setRegHospital('');
+                          setRegVillage('');
+                        }}
+                        className={`flex items-start justify-between p-3 rounded-xl border cursor-pointer transition-all duration-200 ${
+                          isSelected 
+                            ? 'border-[#1B6CA8] bg-blue-50/20 shadow-sm' 
+                            : 'border-gray-100 hover:border-gray-200 bg-white'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${
+                            isSelected ? 'bg-[#1B6CA8] text-white' : 'bg-gray-100 text-gray-400'
+                          }`}>
+                            <Icon size={16} />
+                          </div>
+                          <div className="text-left">
+                            <p className={`text-xs font-extrabold ${isSelected ? 'text-[#1B6CA8]' : 'text-gray-700'}`}>{r.name}</p>
+                            <p className="text-[10px] text-gray-400 mt-0.5 leading-normal">{r.desc}</p>
+                          </div>
+                        </div>
+                        {isSelected && (
+                          <div className="w-4.5 h-4.5 rounded-full bg-[#1B6CA8] flex items-center justify-center text-white text-[9px] mt-0.5">✓</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Conditional Hospital Selector */}
+              {regRole === 'doctor' && (
+                <div className="space-y-2 animate-fadeIn">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500">Select Clinical Hospital</label>
+                  <div className="relative flex items-center border border-gray-300 rounded-xl bg-white focus-within:ring-2 focus-within:ring-[#1B6CA8] overflow-hidden">
+                    <div className="pl-4 text-gray-400">
+                      <Activity size={16} />
+                    </div>
+                    <select
+                      value={regHospital}
+                      onChange={(e) => setRegHospital(e.target.value)}
+                      className="w-full p-3 bg-transparent outline-none text-sm text-gray-700 appearance-none bg-white cursor-pointer"
+                      required
+                    >
+                      <option value="">-- Choose Hospital --</option>
+                      {hospitals.map(h => (
+                        <option key={h.id} value={h.name}>{h.name}</option>
+                      ))}
+                    </select>
+                    <div className="pr-4 pointer-events-none text-gray-400 text-xs">▼</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Conditional Village Selector */}
+              {regRole === 'asha' && (
+                <div className="space-y-2 animate-fadeIn">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500">Select Village Area</label>
+                  <div className="relative flex items-center border border-gray-300 rounded-xl bg-white focus-within:ring-2 focus-within:ring-[#1B6CA8] overflow-hidden">
+                    <div className="pl-4 text-gray-400">
+                      <Home size={16} />
+                    </div>
+                    <select
+                      value={regVillage}
+                      onChange={(e) => setRegVillage(e.target.value)}
+                      className="w-full p-3 bg-transparent outline-none text-sm text-gray-700 appearance-none bg-white cursor-pointer"
+                      required
+                    >
+                      <option value="">-- Choose Village --</option>
+                      {villages.map(v => (
+                        <option key={v.id} value={v.name}>{v.name}</option>
+                      ))}
+                    </select>
+                    <div className="pr-4 pointer-events-none text-gray-400 text-xs">▼</div>
+                  </div>
+                </div>
+              )}
+
+              {/* District & Language */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500">District / City</label>
+                  <div className="relative flex items-center border border-gray-300 rounded-xl bg-white focus-within:ring-2 focus-within:ring-[#1B6CA8] overflow-hidden">
+                    <div className="pl-4 text-gray-400">
+                      <MapPin size={16} />
+                    </div>
+                    <input
+                      type="text"
+                      value={regDistrict}
+                      onChange={(e) => setRegDistrict(e.target.value)}
+                      className="w-full p-3 outline-none text-sm text-gray-700"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500">Language</label>
+                  <div className="relative flex items-center border border-gray-300 rounded-xl bg-white focus-within:ring-2 focus-within:ring-[#1B6CA8] overflow-hidden">
+                    <div className="pl-4 text-gray-400">
+                      <Languages size={16} />
+                    </div>
+                    <select
+                      value={regLanguage}
+                      onChange={(e) => setRegLanguage(e.target.value)}
+                      className="w-full p-3 bg-transparent outline-none text-sm text-gray-700 appearance-none bg-white cursor-pointer"
+                    >
+                      <option value="en">English</option>
+                      <option value="ta">Tamil (தமிழ்)</option>
+                      <option value="hi">Hindi (हिन्दी)</option>
+                    </select>
+                    <div className="pr-4 pointer-events-none text-gray-400 text-xs">▼</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-[#1B6CA8] hover:bg-[#155A8A] text-white py-3.5 rounded-xl font-bold text-sm shadow-md transition-all active:scale-[0.99] disabled:opacity-50"
+                >
+                  {loading ? 'Completing Profile...' : 'Finish Registration'}
                 </button>
               </div>
             </form>
