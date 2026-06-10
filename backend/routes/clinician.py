@@ -545,15 +545,19 @@ async def process_voice_note(
         structured_data = {}
         if groq_api_key:
             client = AsyncGroq(api_key=groq_api_key)
-            prompt = f"""Extract structured clinical information from this doctor's dictated consultation note. Return ONLY this JSON with no other text:
+            prompt = f"""You are a professional medical scribe. Extract and structure clinical information from this doctor's dictated consultation note.
+            Ensure you translate casual descriptions to proper clinical terminology (e.g., 'tummy ache' -> 'abdominal pain', 'BP high' -> 'elevated blood pressure'). 
+            Ensure each field is detailed, clinical, and precise, avoiding generic or single-word descriptions where possible.
+            
+            Return ONLY this JSON with no other text:
             {{
-                "chief_complaint": extracted text or null,
-                "examination_findings": extracted text or null,
-                "diagnosis": list of diagnoses or empty list,
-                "plan": treatment plan text or null,
-                "follow_up": follow-up instructions or null,
-                "medicines_mentioned": list of any medicine names mentioned or [],
-                "raw_transcription": full original transcribed text
+                "chief_complaint": "detailed, clinical description of patient complaints and history",
+                "examination_findings": "clinical examination findings, vital signs, or observations (if mentioned, otherwise detailed 'Not recorded')",
+                "diagnosis": ["specific diagnoses with clinical terms, e.g., 'Acute Upper Respiratory Tract Infection' instead of 'Cold'"],
+                "plan": "detailed plan including medicine schedules, dosages, frequencies, and general recommendations",
+                "follow_up": "specific follow-up instructions (e.g., '3-5 days or immediately if symptoms worsen')",
+                "medicines_mentioned": ["list of specific medicine names mentioned"],
+                "raw_transcription": "full original transcribed text"
             }}
             
             Dictated note: {transcription}"""

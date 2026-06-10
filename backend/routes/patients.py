@@ -235,8 +235,8 @@ async def log_symptoms(req: SymptomLogRequest, current_user: UserResponse = Depe
     patient_id = str(patient["_id"])
     
     prompt = f"""
-    You are a clinical AI assistant triage agent. 
-    Based on the patient's self-reported symptoms, classify their risk level.
+    You are a professional clinical triage AI agent.
+    Analyze the patient's self-reported symptoms thoroughly. Avoid general or vague explanations. Provide detailed, specific, and clear explanations of what their symptoms could indicate and what exact next steps they must follow.
     
     Patient: {patient.get('name', 'Unknown')}
     Symptoms: {req.transcript}
@@ -244,8 +244,8 @@ async def log_symptoms(req: SymptomLogRequest, current_user: UserResponse = Depe
     Respond in this exact JSON format:
     {{
       "risk_level": "LOW",
-      "reasoning": "one short sentence explaining why",
-      "recommendation": "one specific action for the patient to take right now",
+      "reasoning": "A detailed, clinical explanation (2-3 sentences) of why this risk level was assigned based on the specific symptoms reported.",
+      "recommendation": "A detailed, action-oriented health recommendation (2-3 sentences) detailing specific self-care steps, warning signs to watch for, and exact guidelines on when and where to seek care.",
       "refer_to_doctor": false
     }}
     
