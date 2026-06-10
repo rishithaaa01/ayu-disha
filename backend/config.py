@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 10080
     firebase_credentials_path: str
+    firebase_credentials_json: Optional[str] = None
     groq_api_key: str
     
     # Optional SMS Gateway configurations

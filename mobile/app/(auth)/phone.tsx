@@ -3,22 +3,41 @@ import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityInd
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import api from '../../services/api';
+import { isFirebaseAvailable, firebaseAuth, setConfirmationResult } from '../../services/firebaseAuth';
 
 export default function PhoneScreen() {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   
   const handleSendOTP = async () => {
-    const cleanPhone = phone.replace(/ /g, '');
+    const cleanPhone = phone.replace(/ /g, '').trim();
+    if (!cleanPhone || cleanPhone.length !== 10) {
+      Alert.alert("Error", "Please enter a valid 10-digit mobile number.");
+      return;
+    }
     const fullPhone = `+91${cleanPhone}`;
     setLoading(true);
     
     try {
-      await api.post('/auth/send-otp', { mobile: fullPhone });
-      router.push(`/(auth)/otp?phone=${encodeURIComponent(fullPhone)}`);
+      if (isFirebaseAvailable && firebaseAuth) {
+        console.log('Sending OTP via Firebase Phone Auth:', fullPhone);
+        const confirmation = await firebaseAuth().signInWithPhoneNumber(fullPhone);
+        setConfirmationResult(confirmation);
+        Alert.alert("Success", "OTP sent to your phone via Firebase!");
+        router.push(`/(auth)/otp?phone=${encodeURIComponent(fullPhone)}&useFirebase=true`);
+      } else {
+        console.log('Sending OTP via DB-backed flow:', fullPhone);
+        const res = await api.post('/auth/send-otp', { mobile: fullPhone });
+        let msg = res.data.message || "OTP sent successfully!";
+        if (res.data.otp) {
+          msg += ` [DEV MODE - OTP: ${res.data.otp}]`;
+        }
+        Alert.alert("Success", msg);
+        router.push(`/(auth)/otp?phone=${encodeURIComponent(fullPhone)}&useFirebase=false`);
+      }
     } catch (e: any) {
       console.error(e);
-      const errorMsg = e.response?.data?.detail || e.message || "Failed to send OTP";
+      const errorMsg = e.message || "Failed to send OTP";
       Alert.alert("Error", errorMsg);
     } finally {
       setLoading(false);

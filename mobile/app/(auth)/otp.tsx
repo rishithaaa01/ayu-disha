@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import api from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
+import { getConfirmationResult, isFirebaseAvailable } from '../../services/firebaseAuth';
 
 export default function OTPScreen() {
-  const { phone } = useLocalSearchParams();
+  const { phone, useFirebase } = useLocalSearchParams();
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(30);
@@ -21,17 +22,30 @@ export default function OTPScreen() {
 
   const handleVerify = async () => {
     if (!otp || otp.length < 6) {
-      alert("Please enter a valid 6-digit OTP");
+      Alert.alert("Error", "Please enter a valid 6-digit OTP");
       return;
     }
 
     setLoading(true);
     try {
-      const response = await api.post('/auth/verify-otp', {
-        mobile: String(phone),
-        otp: otp,
-        language: 'en'
-      });
+      let payload: any = { language: 'en' };
+
+      if (useFirebase === 'true' && isFirebaseAvailable) {
+        console.log('Verifying OTP via Firebase confirmation session...');
+        const confirmation = getConfirmationResult();
+        if (!confirmation) {
+          throw new Error("Firebase confirmation session not found. Please request OTP again.");
+        }
+        const userCredential = await confirmation.confirm(otp);
+        const firebaseToken = await userCredential.user.getIdToken();
+        payload.firebase_token = firebaseToken;
+      } else {
+        console.log('Verifying OTP via DB-backed flow...');
+        payload.mobile = String(phone);
+        payload.otp = otp;
+      }
+
+      const response = await api.post('/auth/verify-otp', payload);
       
       const { access_token, user, needs_registration } = response.data;
       await login(user, access_token);
@@ -44,7 +58,7 @@ export default function OTPScreen() {
     } catch (e: any) {
       const errorMsg = e.response?.data?.detail || e.message || "Unknown Error";
       console.error("Login Error:", errorMsg);
-      alert(`Login Failed: ${errorMsg}\n\nCheck if your backend is running, the IP address in Config.ts is correct, and you entered the correct OTP.`);
+      Alert.alert("Verification Failed", errorMsg);
     } finally {
       setLoading(false);
     }

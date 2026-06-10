@@ -3,15 +3,29 @@ from firebase_admin import credentials, auth
 from fastapi import HTTPException, status
 from config import settings
 import os
+import json
 
 # Initialize Firebase Admin SDK
 try:
-    if settings.firebase_credentials_path and os.path.exists(settings.firebase_credentials_path):
-        cred = credentials.Certificate(settings.firebase_credentials_path)
-        if not firebase_admin._apps:
+    if not firebase_admin._apps:
+        # 1. Try loading from raw JSON string (ideal for Render deployment)
+        if settings.firebase_credentials_json:
+            try:
+                creds_dict = json.loads(settings.firebase_credentials_json)
+                cred = credentials.Certificate(creds_dict)
+                firebase_admin.initialize_app(cred)
+                print("[Firebase] Firebase Admin SDK initialized successfully via FIREBASE_CREDENTIALS_JSON setting.")
+            except Exception as json_err:
+                print(f"Error initializing Firebase Admin from JSON string: {json_err}")
+        
+        # 2. Fallback to local file path
+        if not firebase_admin._apps and settings.firebase_credentials_path and os.path.exists(settings.firebase_credentials_path):
+            cred = credentials.Certificate(settings.firebase_credentials_path)
             firebase_admin.initialize_app(cred)
-    else:
-        print("Warning: Firebase credentials not found. Ensure firebase_credentials.json exists.")
+            print(f"[Firebase] Firebase Admin SDK initialized successfully via file: {settings.firebase_credentials_path}")
+            
+        if not firebase_admin._apps:
+            print("Warning: Firebase credentials not found. Ensure either firebase_credentials_json or firebase_credentials.json is configured.")
 except Exception as e:
     print(f"Error initializing Firebase Admin: {e}")
 
