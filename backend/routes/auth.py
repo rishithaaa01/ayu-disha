@@ -54,6 +54,7 @@ class UserRegisterRequest(BaseModel):
     district: Optional[str] = None
     hospital: Optional[str] = None
     village: Optional[str] = None
+    speciality: Optional[str] = None
 
 class UserLoginRequest(BaseModel):
     email: str
@@ -187,6 +188,7 @@ async def verify_otp(request: VerifyOTPRequest):
                 result = await db.users.insert_one(new_user_data)
                 user_id = str(result.inserted_id)
                 new_user_data["id"] = user_id
+                new_user_data.pop("_id", None)
                 user_response = UserResponse(**new_user_data)
                 print(f"✅ New user created with ID: {user_id}")
             except Exception as ins_err:
@@ -241,6 +243,7 @@ async def complete_profile(request: ProfileCompleteRequest, current_user: UserRe
         "hospital": request.hospital,
         "village": request.village,
         "district": request.district,
+        "speciality": request.speciality,
         "is_profile_complete": True
     }
     
@@ -347,6 +350,7 @@ async def register(request: UserRegisterRequest):
         "district": request.district or "Chennai",
         "hospital": request.hospital,
         "village": request.village,
+        "speciality": request.speciality,
         "is_profile_complete": True,
         "created_at": datetime.utcnow()
     }
@@ -375,6 +379,7 @@ async def register(request: UserRegisterRequest):
             print("✅ Linked Patient profile created.")
 
         new_user_data.pop("password_hash", None)
+        new_user_data.pop("_id", None)
         user_response = UserResponse(**new_user_data)
         
     except Exception as ins_err:

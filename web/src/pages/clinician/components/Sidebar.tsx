@@ -6,7 +6,8 @@ import {
   ArrowLeftRight, 
   LogOut, 
   Activity,
-  ChevronRight
+  ChevronRight,
+  Settings
 } from 'lucide-react';
 import { useClinicianStore } from '../../../store/clinicianStore';
 
@@ -23,6 +24,7 @@ export default function Sidebar() {
     { name: 'OPD Queue', icon: Users, path: '/clinician/queue' },
     { name: 'My Patients', icon: UserRound, path: '/clinician/patients' },
     { name: 'Referrals', icon: ArrowLeftRight, path: '/clinician/referrals' },
+    { name: 'Settings', icon: Settings, path: '/clinician/settings' },
   ];
 
   return (

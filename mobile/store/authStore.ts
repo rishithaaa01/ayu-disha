@@ -33,11 +33,13 @@ export const useAuthStore = create<AuthState>((set) => ({
   
   login: async (user, token) => {
     await SecureStore.setItemAsync('token', token);
+    await SecureStore.setItemAsync('user', JSON.stringify(user));
     set({ user, token, isAuthenticated: true });
   },
   
   logout: async () => {
     await SecureStore.deleteItemAsync('token');
+    await SecureStore.deleteItemAsync('user');
     set({ user: null, token: null, isAuthenticated: false });
   },
   
@@ -45,14 +47,17 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const token = await SecureStore.getItemAsync('token');
       if (token) {
-        // Automatically injects token via axios interceptor
+        // Always fetch fresh user data from backend on restore
         const response = await api.get('/auth/me');
-        set({ user: response.data, token, isAuthenticated: true, isLoading: false });
+        const freshUser = response.data;
+        await SecureStore.setItemAsync('user', JSON.stringify(freshUser));
+        set({ user: freshUser, token, isAuthenticated: true, isLoading: false });
       } else {
         set({ isLoading: false });
       }
     } catch (e) {
       await SecureStore.deleteItemAsync('token');
+      await SecureStore.deleteItemAsync('user');
       set({ user: null, token: null, isAuthenticated: false, isLoading: false });
     }
   }

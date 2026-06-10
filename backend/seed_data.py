@@ -130,21 +130,20 @@ def seed_data():
 
     # --- Phase 3 ASHA Seed Data ---
     print("Seeding ASHA Worker data...")
-    asha_user = db.users.find_one({"mobile": "+919876543210"})
-    if not asha_user:
-        res = db.users.insert_one({
-            "name": "Kavitha Devi",
-            "mobile": "+919876543210",
-            "role": "asha",
-            "district": "Chennai",
-            "language": "en",
-            "created_at": datetime.utcnow()
-        })
-        asha_user_id = str(res.inserted_id)
-        print(f"Created ASHA worker: {asha_user_id}")
-    else:
-        asha_user_id = str(asha_user["_id"])
-        print(f"Found ASHA worker: {asha_user_id}")
+    asha_data = {
+        "name": "Kavitha Devi",
+        "email": "asha@ayudisha.org",
+        "password_hash": "$2b$12$6hQTsLbrXmfmAkQ8Zftd1uL7Ey1hPNjzc8fG049MchfRgZi4zU14.",
+        "mobile": "+919876543210",
+        "role": "asha",
+        "district": "Chennai",
+        "language": "en",
+        "created_at": datetime.utcnow()
+    }
+    db.users.update_one({"mobile": asha_data["mobile"]}, {"$set": asha_data}, upsert=True)
+    asha_user = db.users.find_one({"mobile": asha_data["mobile"]})
+    asha_user_id = str(asha_user["_id"])
+    print(f"ASHA worker seeded: {asha_user_id}")
 
     # Create a patient profile for Lakshmi (Maternal Health Loop Demo)
     lakshmi_user = db.users.insert_one({
@@ -259,6 +258,8 @@ def seed_data():
     # 2. Doctor user
     doctor_data = {
         "name": "Dr. Ramesh Kumar",
+        "email": "doctor@ayudisha.org",
+        "password_hash": "$2b$12$6hQTsLbrXmfmAkQ8Zftd1uL7Ey1hPNjzc8fG049MchfRgZi4zU14.",
         "mobile": "+919876543211",
         "role": "doctor",
         "speciality": "General Medicine",

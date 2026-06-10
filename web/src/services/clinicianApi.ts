@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // This matches your backend URL. 
-const API_URL = 'https://ayu-disha.onrender.com/api/clinician';
+const API_URL = `${import.meta.env.VITE_API_URL || 'https://ayu-disha.onrender.com/api'}/clinician`;
 
 const clinicianApi = axios.create({
   baseURL: API_URL,

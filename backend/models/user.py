@@ -27,6 +27,7 @@ class UserResponse(BaseModel):
     district: Optional[str] = None
     hospital: Optional[str] = None
     village: Optional[str] = None
+    speciality: Optional[str] = None
     is_profile_complete: bool = False
     created_at: datetime
     
@@ -39,6 +40,8 @@ class ProfileCompleteRequest(BaseModel):
     hospital: Optional[str] = None
     village: Optional[str] = None
     district: Optional[str] = None
+    speciality: Optional[str] = None
+
 
 class TokenResponse(BaseModel):
     access_token: str

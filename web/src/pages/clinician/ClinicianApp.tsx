@@ -1,13 +1,24 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import QueueScreen from './QueueScreen';
 import ConsultationScreen from './ConsultationScreen';
+import SettingsScreen from './SettingsScreen';
+import { useAuthStore } from '../../store/authStore';
+import { useClinicianStore } from '../../store/clinicianStore';
 import { Bell, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function ClinicianApp() {
   const today = format(new Date(), 'EEEE, d MMMM yyyy');
+  const { user } = useAuthStore();
+  const { setDoctor } = useClinicianStore();
+
+  useEffect(() => {
+    if (user && user.role === 'doctor') {
+      setDoctor(user);
+    }
+  }, [user, setDoctor]);
 
   return (
     <div className="flex bg-[#F7F3EE] min-h-screen">
@@ -36,6 +47,7 @@ export default function ClinicianApp() {
           <Routes>
             <Route path="queue" element={<QueueScreen />} />
             <Route path="consultation/:visitId" element={<ConsultationScreen />} />
+            <Route path="settings" element={<SettingsScreen />} />
             {/* We will add more routes as we build screens */}
             <Route path="/" element={<Navigate to="queue" replace />} />
           </Routes>

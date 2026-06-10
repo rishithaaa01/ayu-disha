@@ -16,7 +16,12 @@ def clear_users():
         "lab_orders",
         "consents",
         "households",
-        "otps"
+        "otps",
+        "referrals",
+        "asha_visits",
+        "alerts",
+        "medicine_orders",
+        "medical_stores"
     ]
 
     print(f"Clearing user-related collections in database '{settings.database_name}'...")

@@ -1,4 +1,3 @@
 export const Config = {
-  // MASTER SWITCH: Change your IP address here once!
-  API_URL: 'https://ayu-disha.onrender.com/api',
+  API_URL: process.env.EXPO_PUBLIC_API_URL || 'https://ayu-disha.onrender.com/api',
 };
