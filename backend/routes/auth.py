@@ -121,8 +121,8 @@ async def send_otp(request: SendOTPRequest):
         "message": f"OTP sent successfully via {sms_res.get('provider')}"
     }
     
-    # Return OTP for testing/development if SMS gateway isn't working/configured
-    if sms_res.get("provider") == "console":
+    # Return OTP for testing/development if SMS gateway isn't working/configured and debug is enabled
+    if sms_res.get("provider") == "console" and settings.debug:
         response_data["otp"] = otp_code
         
     return response_data
@@ -161,8 +161,8 @@ async def verify_otp(request: VerifyOTPRequest):
             otp_entered = request.otp.strip()
             print(f"📲 Verifying DB-backed OTP for {mobile_number}...")
             
-            # Master OTP bypass for demo / evaluator convenience
-            if otp_entered == "123456":
+            # Master OTP bypass for demo / evaluator convenience (gated by debug flag)
+            if otp_entered == "123456" and settings.debug:
                 print(f"✅ Master OTP used for {mobile_number}")
             else:
                 # Verify against our 'otps' collection

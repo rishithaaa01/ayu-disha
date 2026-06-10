@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     twilio_auth_token: Optional[str] = None
     twilio_from_number: Optional[str] = None
     fast2sms_api_key: Optional[str] = None
+    
+    # Debug mode controls Master OTP bypass
+    debug: bool = False
 
     class Config:
         env_file = ".env"
