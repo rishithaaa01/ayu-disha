@@ -10,6 +10,7 @@ from jose import jwt
 from bson import ObjectId
 import random
 from services.sms_service import sms_service
+from services.email_service import email_service
 import bcrypt
 
 def hash_password(password: str) -> str:
@@ -480,9 +481,17 @@ async def forgot_password(request: ForgotPasswordRequest):
     print("║ Valid for 15 minutes                             ║")
     print("╚" + "═"*50 + "╝\n")
 
+    # Send email reset code via SMTP
+    email_sent = await email_service.send_reset_code(email_clean, reset_code)
+
+    if email_sent:
+        msg = "Password reset code sent. Please check your email inbox."
+    else:
+        msg = "Password reset code generated. Check server console logs (SMTP credentials not configured)."
+
     return {
         "status": "success", 
-        "message": "Password reset code sent. Please check your console logs or email."
+        "message": msg
     }
 
 @router.post("/reset-password")

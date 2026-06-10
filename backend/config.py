@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     twilio_from_number: Optional[str] = None
     fast2sms_api_key: Optional[str] = None
     
+    # Optional SMTP configuration for email sending
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = 587
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_sender: Optional[str] = None
+
     # Debug mode controls Master OTP bypass
     debug: bool = False
 
