@@ -403,7 +403,7 @@ export default function Login() {
           <div className="relative z-10 space-y-4 my-auto">
             <h2 className="text-3xl font-extrabold tracking-tight leading-tight">Clinic-OS for rural healthcare in India</h2>
             <p className="text-blue-100/80 text-sm leading-relaxed">
-              Bridging community health workers (ASHA), clinics, and district supervisors on a unified, high-reliability platform.
+              Bridging community health workers (Asha), clinics, and district supervisors on a unified, high-reliability platform.
             </p>
           </div>
 
@@ -932,7 +932,7 @@ export default function Login() {
                   }}
                   className="w-full text-center text-gray-400 font-semibold text-xs hover:underline flex items-center justify-center gap-1"
                 >
-                  <ChevronLeft size={14} /> Back to Login
+                  <ChevronLeft size={14} /> Back to Login / Sign In
                 </button>
               </div>
             </form>
