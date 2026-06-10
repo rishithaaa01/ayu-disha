@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Mic, X, Square, RotateCcw, Check, Sparkles, AlertCircle } from 'lucide-react';
 import { useVoiceRecorder } from '../../../hooks/useVoiceRecorder';
 import api from '../../../services/clinicianApi';
+import toast from 'react-hot-toast';
 
 interface VoiceNoteRecorderProps {
   visitId: string;
@@ -27,7 +28,19 @@ export default function VoiceNoteRecorder({ visitId, onExtractionComplete, onClo
       const data = await api.processVoiceNote(visitId, audioBlob);
       setTranscriptionData(data);
     } catch (err) {
-      alert("Failed to process voice note. Please try again.");
+      console.warn("Failed to process clinician voice note. Storing locally as Base64.", err);
+      try {
+        const reader = new FileReader();
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = () => {
+          localStorage.setItem(`offline_voice_${visitId}`, reader.result as string);
+          toast.success("Voice note saved locally! Click 'Process Now' when connection returns.");
+          onClose();
+        };
+      } catch (saveErr) {
+        console.error("FileReader save error:", saveErr);
+        toast.error("Failed to process voice note. Check internet connection.");
+      }
     } finally {
       setIsProcessing(false);
     }

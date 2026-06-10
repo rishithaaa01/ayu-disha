@@ -229,9 +229,9 @@ export default function ConsultationScreen() {
              {activeTab === 'labs' && (
                <LabOrderPanel patient={patientRecord} visitId={visitId!} />
              )}
-             {activeTab === 'referral' && (
-               <ReferralPanel patient={patientRecord} visitId={visitId!} />
-             )}
+              {activeTab === 'referral' && (
+                <ReferralPanel patient={patientRecord} visitId={visitId!} symptoms={symptoms} diagnoses={diagnosis} />
+              )}
              {activeTab === 'history' && (
                <div className="h-full overflow-y-auto p-4 bg-[#F7F3EE]">
                   <div className="bg-white rounded-2xl border border-[#E2DDD8] min-h-full">

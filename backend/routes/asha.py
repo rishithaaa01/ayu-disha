@@ -333,7 +333,7 @@ async def transcribe_audio(
     Endpoint for ASHA workers to upload audio recordings of field visits.
     Uses Groq AI to transcribe voice notes.
     """
-    if not file.filename.endswith(('.wav', '.mp3', '.m4a', '.ogg')):
+    if not file.filename.endswith(('.wav', '.mp3', '.m4a', '.ogg', '.webm', '.bin')):
         raise HTTPException(status_code=400, detail="Unsupported audio format")
 
     temp_dir = tempfile.gettempdir()

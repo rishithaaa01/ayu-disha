@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowUpRight, Search, Check, Loader2, Hospital, Stethoscope, AlertTriangle } from 'lucide-react';
 import api from '../../../services/clinicianApi';
 import toast from 'react-hot-toast';
@@ -6,14 +6,53 @@ import toast from 'react-hot-toast';
 interface ReferralPanelProps {
   patient: any;
   visitId: string;
+  symptoms?: string;
+  diagnoses?: string[];
 }
 
-export default function ReferralPanel({ patient, visitId }: ReferralPanelProps) {
+export default function ReferralPanel({ patient, visitId, symptoms, diagnoses }: ReferralPanelProps) {
   const [toHospital, setToHospital] = useState('');
   const [speciality, setSpeciality] = useState('General Medicine');
   const [urgency, setUrgency] = useState('routine');
   const [reason, setReason] = useState('');
   const [isSending, setIsSending] = useState(false);
+
+  // Auto-detect severe indications and pre-fill referral
+  useEffect(() => {
+    if (!reason && symptoms) {
+      const query = symptoms.toLowerCase();
+      const isSevere = 
+        query.includes('chest pain') ||
+        query.includes('heart attack') ||
+        query.includes('stroke') ||
+        query.includes('paralysis') ||
+        query.includes('bleeding') ||
+        query.includes('unconscious') ||
+        query.includes('seizure') ||
+        query.includes('difficulty breathing') ||
+        query.includes('breathlessness') ||
+        diagnoses?.some(d => {
+          const dl = d.toLowerCase();
+          return dl.includes('infarction') || dl.includes('stroke') || dl.includes('hemorrhage') || dl.includes('cardiac');
+        });
+
+      if (isSevere) {
+        setUrgency('urgent');
+        
+        let targetSpeciality = 'General Medicine';
+        if (query.includes('chest') || query.includes('heart') || query.includes('cardiac')) {
+          targetSpeciality = 'Cardiology';
+        } else if (query.includes('stroke') || query.includes('paralysis') || query.includes('neurolog')) {
+          targetSpeciality = 'Neurology';
+        }
+        
+        setSpeciality(targetSpeciality);
+        setToHospital('Apollo Chennai'); // Preferred specialist facility
+        setReason(`Urgent referral recommended due to severe symptoms detected in consultation: "${symptoms}"`);
+        toast('🚨 Severe symptoms detected. Urgent specialist referral pre-filled.', { id: 'severe-alert', duration: 5000 });
+      }
+    }
+  }, [symptoms, diagnoses]);
 
   const specialities = [
     'General Medicine', 'Cardiology', 'Neurology', 'Orthopaedics',

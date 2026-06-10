@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../services/api';
+import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
 import {
   Users, Activity, MapPin, Home, ArrowUpRight, Plus, CheckCircle2,
   RefreshCcw, AlertTriangle, LogOut, FileText, ChevronRight, User,
-  Calendar, Phone, Shield, Languages, Info
+  Calendar, Phone, Shield, Languages, Info, Mic, Sparkles
 } from 'lucide-react';
 
 function MetricCard({ title, value, change, icon: Icon, color, alert }) {
@@ -39,6 +40,30 @@ export default function AshaDashboard() {
   const { user, logout } = useAuthStore();
   const [activeTab, setActiveTab] = useState('households');
   
+  // Search & Filtering States
+  const [searchQuery, setSearchQuery] = useState('');
+  const [riskFilter, setRiskFilter] = useState('All');
+  const [offlineVisits, setOfflineVisits] = useState([]);
+  
+  // Async states
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isAnalyzingRisk, setIsAnalyzingRisk] = useState(false);
+
+  // Voice recording hook
+  const { isRecording, duration, audioBlob, startRecording, stopRecording, clearRecording } = useVoiceRecorder();
+
+  // Load offline visits from local storage on startup
+  useEffect(() => {
+    const stored = localStorage.getItem('offline_visits');
+    if (stored) {
+      try {
+        setOfflineVisits(JSON.parse(stored));
+      } catch (e) {
+        console.error("Failed to parse offline visits:", e);
+      }
+    }
+  }, []);
+
   // Modals
   const [showHouseholdModal, setShowHouseholdModal] = useState(false);
   const [showVisitModal, setShowVisitModal] = useState(false);
@@ -57,6 +82,7 @@ export default function AshaDashboard() {
   const [visitSymptoms, setVisitSymptoms] = useState('');
   const [visitRisk, setVisitRisk] = useState('green');
   const [visitReasoning, setVisitReasoning] = useState('');
+  const [visitPreferredHospital, setVisitPreferredHospital] = useState('');
 
   const [refPatientName, setRefPatientName] = useState('');
   const [refHhId, setRefHhId] = useState('');
@@ -67,6 +93,202 @@ export default function AshaDashboard() {
   const [successMessage, setSuccessMessage] = useState('');
   const [formError, setFormError] = useState('');
   const [formLoading, setFormLoading] = useState(false);
+
+  // Transcription Audio Upload
+  const handleTranscribe = async () => {
+    if (!audioBlob) return;
+    setIsTranscribing(true);
+    setFormError('');
+    try {
+      const formData = new FormData();
+      formData.append('file', audioBlob, 'voice_note.webm');
+      
+      const res = await api.post('/asha/transcribe', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      if (res.data.transcript) {
+        setVisitSymptoms(prev => prev + (prev ? ' ' : '') + res.data.transcript);
+        clearRecording();
+      } else {
+        setFormError("No speech detected. Please speak louder and retry.");
+      }
+    } catch (err) {
+      console.error(err);
+      setFormError("Failed to transcribe audio. Verify your Groq API key.");
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
+  // Auto-transcribe once recording stops and audioBlob is populated
+  useEffect(() => {
+    if (audioBlob) {
+      handleTranscribe();
+    }
+  }, [audioBlob]);
+
+  // AI Risk Classifier Call
+  const handleAiRiskAnalysis = async () => {
+    if (!visitHhId) {
+      setFormError("Please select a household first.");
+      return;
+    }
+    if (!visitSymptoms.trim()) {
+      setFormError("Please enter or dictate symptoms first.");
+      return;
+    }
+    
+    setIsAnalyzingRisk(true);
+    setFormError('');
+    try {
+      const selectedHh = households?.find(h => h.id === visitHhId);
+      const selectedMember = selectedHh?.members?.find(m => m.name === visitMemberName);
+      const age = selectedMember?.age || 30;
+      const gender = selectedMember?.gender || 'female';
+      
+      const payload = {
+        member_name: visitMemberName,
+        member_age: age,
+        member_gender: gender,
+        visit_type: visitType,
+        observations: {
+          symptoms: visitSymptoms
+        },
+        transcript: ""
+      };
+      
+      console.log("Calling AI risk classifier with:", payload);
+      const res = await api.post('/asha/visits/classify-risk', payload);
+      
+      console.log("AI Risk classification response:", res.data);
+      const risk = res.data.risk_level?.toLowerCase() || 'green';
+      setVisitRisk(risk);
+      setVisitReasoning(res.data.reasoning || '');
+      setSuccessMessage(`AI classification complete! Suggested: ${res.data.risk_level} risk. Please review details.`);
+      setTimeout(() => setSuccessMessage(''), 6000);
+    } catch (err) {
+      console.error(err);
+      setFormError("AI classification failed. Check your Groq API key.");
+    } finally {
+      setIsAnalyzingRisk(false);
+    }
+  };
+
+  // Sync Offline Visits Queue
+  const handleSyncOfflineVisits = async () => {
+    setFormLoading(true);
+    setFormError('');
+    setSuccessMessage('');
+    let syncCount = 0;
+    const remaining = [];
+    
+    for (const visit of offlineVisits) {
+      try {
+        let finalVisit = { ...visit };
+        
+        // 1. If it has an offline recording, transcribe it first
+        if (finalVisit.needs_transcription && finalVisit.audio_base64) {
+          try {
+            // Convert base64 Data URL to Blob
+            const responseBlob = await fetch(finalVisit.audio_base64);
+            const blob = await responseBlob.blob();
+            const formData = new FormData();
+            formData.append('file', blob, 'voice_note.webm');
+            
+            const transRes = await api.post('/asha/transcribe', formData, {
+              headers: {
+                'Content-Type': 'multipart/form-data'
+              }
+            });
+            if (transRes.data.transcript) {
+              finalVisit.observations.symptoms = (finalVisit.observations.symptoms || '') + 
+                (finalVisit.observations.symptoms ? ' ' : '') + transRes.data.transcript;
+              finalVisit.needs_transcription = false;
+              finalVisit.needs_ai = true; // Symptoms updated, run AI classification
+            }
+          } catch (transErr) {
+            console.warn("Could not transcribe offline voice note during sync:", transErr);
+          }
+        }
+        
+        // 2. Run AI analysis if needed and online now
+        if (finalVisit.needs_ai) {
+          try {
+            const selectedHh = households?.find(h => h.id === finalVisit.household_id);
+            const selectedMember = selectedHh?.members?.find(m => m.name === finalVisit.member_id);
+            const age = selectedMember?.age || 30;
+            const gender = selectedMember?.gender || 'female';
+            
+            const aiRes = await api.post('/asha/visits/classify-risk', {
+              member_name: finalVisit.member_id,
+              member_age: age,
+              member_gender: gender,
+              visit_type: finalVisit.visit_type,
+              observations: {
+                symptoms: finalVisit.observations.symptoms
+              },
+              transcript: ""
+            });
+            
+            finalVisit.risk_level = aiRes.data.risk_level?.toLowerCase() || 'green';
+            finalVisit.ai_reasoning = aiRes.data.reasoning || '';
+            finalVisit.ai_recommendation = aiRes.data.recommendation || '';
+            finalVisit.needs_ai = false;
+          } catch (aiErr) {
+            console.warn("Could not get AI analysis for offline visit during sync:", aiErr);
+          }
+        }
+        
+        // 3. Submit visit to backend
+        const payload = {
+          household_id: finalVisit.household_id,
+          member_id: finalVisit.member_id,
+          visit_type: finalVisit.visit_type,
+          observations: finalVisit.observations,
+          risk_level: finalVisit.risk_level?.toUpperCase(),
+          ai_reasoning: finalVisit.ai_reasoning,
+          ai_recommendation: finalVisit.ai_recommendation
+        };
+        await api.post('/asha/visits', payload);
+        
+        // 4. Direct referral creation if severe risk (RED) to ensure doctor queue placement for the preferred hospital
+        if (finalVisit.risk_level?.toLowerCase() === 'red') {
+          try {
+            const referralPayload = {
+              household_id: finalVisit.household_id,
+              to_hospital_id: finalVisit.preferred_hospital || hospitals?.[0]?.name || "Govt General Hospital Chennai",
+              urgency: "Today",
+              ai_summary: finalVisit.ai_reasoning || 'Severe symptoms detected during offline field screening.',
+              notes: `Automatic referral generated from offline visit. Symptoms: ${finalVisit.observations.symptoms || "Severe complaints"}`
+            };
+            await api.post('/asha/referrals', referralPayload);
+          } catch (refErr) {
+            console.warn("Auto referral during sync failed:", refErr);
+          }
+        }
+
+        syncCount++;
+      } catch (err) {
+        console.error("Failed to sync offline visit:", visit.id, err);
+        remaining.push(visit);
+      }
+    }
+    
+    setOfflineVisits(remaining);
+    localStorage.setItem('offline_visits', JSON.stringify(remaining));
+    
+    if (syncCount > 0) {
+      setSuccessMessage(`Successfully synced ${syncCount} offline visits to server!`);
+      refetchHh();
+      refetchStats();
+      setTimeout(() => setSuccessMessage(''), 5000);
+    } else {
+      setFormError("Failed to sync offline visits. Make sure you are connected to the internet.");
+    }
+    setFormLoading(false);
+  };
 
   // Queries
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery({
@@ -97,7 +319,6 @@ export default function AshaDashboard() {
       { id: 'r2', patient_name: 'Diya Patel', referred_to: 'Velachery PHC', urgency: 'Watch', sent_date: '08 Jun, 11:20', status: 'seen' }
     ])
   });
-
   const { data: hospitals } = useQuery({
     queryKey: ['nearbyHospitals'],
     queryFn: () => api.get('/auth/hospitals').then(r => r.data).catch(() => [
@@ -105,11 +326,31 @@ export default function AshaDashboard() {
       { id: 'h2', name: 'Velachery PHC' }
     ])
   });
-
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
+
+  const filteredHouseholds = (households || []).filter((h) => {
+    // 1. Filter by Priority Tab
+    if (riskFilter === 'Urgent') {
+      if (h.risk_level !== 'red') return false;
+    } else if (riskFilter === 'Watch') {
+      if (h.risk_level !== 'amber') return false;
+    } else if (riskFilter === 'Done') {
+      if (h.risk_level !== 'green') return false;
+    }
+
+    // 2. Filter by Search Query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      const nameMatch = h.family_name?.toLowerCase().includes(query);
+      const villageMatch = h.village?.toLowerCase().includes(query);
+      return nameMatch || villageMatch;
+    }
+
+    return true;
+  });
 
   const handleAddMember = () => {
     setHhMembers([...hhMembers, { name: '', age: '', gender: 'female' }]);
@@ -177,15 +418,81 @@ export default function AshaDashboard() {
         ai_recommendation: 'Monitor vitals next week.'
       };
       await api.post('/asha/visits', payload);
-      setSuccessMessage('Field visit logged successfully!');
+      
+      // Auto-dispatch referral if risk is severe (RED)
+      if (visitRisk?.toLowerCase() === 'red') {
+        try {
+          const refPayload = {
+            household_id: visitHhId,
+            to_hospital_id: visitPreferredHospital || hospitals?.[0]?.name || "Govt General Hospital Chennai",
+            urgency: 'Today',
+            ai_summary: visitReasoning || 'Urgent AI classified risk.',
+            notes: `Automatic doctor referral for severe risk observations. Symptoms: ${visitSymptoms}`
+          };
+          await api.post('/asha/referrals', refPayload);
+          setSuccessMessage('Field visit logged & automatic urgent referral dispatched to doctor queue!');
+        } catch (refErr) {
+          console.warn("Auto referral failed:", refErr);
+          setSuccessMessage('Field visit logged successfully!');
+        }
+      } else {
+        setSuccessMessage('Field visit logged successfully!');
+      }
+
       setShowVisitModal(false);
       setVisitSymptoms('');
       setVisitReasoning('');
+      setVisitPreferredHospital('');
       refetchHh();
       refetchStats();
-      setTimeout(() => setSuccessMessage(''), 4000);
+      setTimeout(() => setSuccessMessage(''), 6000);
     } catch (err) {
-      setFormError(err.response?.data?.detail || 'Failed to log field visit.');
+      // Offline fallback
+      console.warn("API visit save failed, saving to offline visits storage instead:", err);
+      
+      const saveOffline = (base64Audio) => {
+        const offlineVisit = {
+          id: 'local_' + Date.now(),
+          household_id: visitHhId,
+          family_name: households?.find(h => h.id === visitHhId)?.family_name || 'Family',
+          member_id: visitMemberName || "unknown",
+          visit_type: visitType,
+          observations: {
+            symptoms: visitSymptoms,
+            recorded_at: new Date().toISOString()
+          },
+          risk_level: visitRisk,
+          ai_reasoning: visitReasoning || 'Logged offline (no AI insights yet).',
+          ai_recommendation: visitReasoning ? 'Monitor vitals next week.' : 'Sync to online to retrieve AI recommendations.',
+          needs_ai: !visitReasoning || visitReasoning.includes('Offline mode') || visitReasoning.includes('Unable to reach') || visitReasoning.includes('missing API key'),
+          needs_transcription: !!base64Audio,
+          audio_base64: base64Audio,
+          preferred_hospital: visitPreferredHospital || hospitals?.[0]?.name || "Govt General Hospital Chennai",
+          created_at: new Date().toISOString()
+        };
+        
+        const updated = [...offlineVisits, offlineVisit];
+        setOfflineVisits(updated);
+        localStorage.setItem('offline_visits', JSON.stringify(updated));
+        
+        setSuccessMessage('Saved locally in offline mode! The visit will be synced when you go online.');
+        setShowVisitModal(false);
+        setVisitSymptoms('');
+        setVisitReasoning('');
+        setVisitPreferredHospital('');
+        clearRecording();
+        setTimeout(() => setSuccessMessage(''), 5000);
+      };
+
+      if (audioBlob) {
+        const reader = new FileReader();
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = () => {
+          saveOffline(reader.result);
+        };
+      } else {
+        saveOffline(null);
+      }
     } finally {
       setFormLoading(false);
     }
@@ -254,8 +561,23 @@ export default function AshaDashboard() {
           </button>
         </div>
       </header>
-
       <main className="max-w-7xl mx-auto p-8 space-y-8">
+        {offlineVisits.length > 0 && (
+          <div className="p-4 bg-amber-500 text-white rounded-xl text-sm font-bold flex items-center justify-between shadow-md animate-pulse">
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={18} />
+              <span>You have {offlineVisits.length} offline visit{offlineVisits.length > 1 ? 's' : ''} waiting to sync to the server.</span>
+            </div>
+            <button
+              onClick={handleSyncOfflineVisits}
+              disabled={formLoading}
+              className="bg-white text-amber-700 px-4 py-1.5 rounded-lg hover:bg-amber-50 transition-colors text-xs font-bold shadow-sm"
+            >
+              {formLoading ? 'Syncing...' : 'Sync Now'}
+            </button>
+          </div>
+        )}
+
         {successMessage && (
           <div className="p-4 bg-green-50 border-l-4 border-green-500 text-green-700 rounded-xl text-sm font-semibold flex items-center gap-2 animate-fadeIn shadow-sm">
             <CheckCircle2 size={16} className="text-green-600" />
@@ -359,57 +681,135 @@ export default function AshaDashboard() {
 
           <div className="p-6">
             {activeTab === 'households' && (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-gray-100 text-xs font-bold text-gray-400 uppercase tracking-wider">
-                      <th className="pb-3 pl-4">Family Name</th>
-                      <th className="pb-3">Village</th>
-                      <th className="pb-3">Risk Status</th>
-                      <th className="pb-3">Family Size</th>
-                      <th className="pb-3 text-right pr-4">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50 text-sm">
-                    {households?.map((hh) => (
-                      <tr key={hh.id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="py-4 pl-4 font-bold text-gray-800">{hh.family_name}</td>
-                        <td className="py-4 text-gray-500">{hh.village}</td>
-                        <td className="py-4">
-                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                            hh.risk_level === 'red'
-                              ? 'bg-red-50 text-red-600 border border-red-100'
-                              : hh.risk_level === 'amber'
-                                ? 'bg-amber-50 text-amber-600 border border-amber-100'
-                                : 'bg-green-50 text-green-600 border border-green-100'
+              <div className="space-y-6">
+                {/* Search & Priority Filters Row */}
+                <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                  {/* Search Bar */}
+                  <div className="relative w-full md:w-80">
+                    <input
+                      type="text"
+                      placeholder="Search family name or village..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-4 pr-10 py-2.5 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#1B6CA8] transition-all"
+                    />
+                    <span className="absolute right-3 top-3.5 text-gray-450">
+                      <Users size={16} />
+                    </span>
+                  </div>
+
+                  {/* Priority Filter Tabs */}
+                  <div className="flex bg-white p-1 rounded-xl border border-gray-200 w-full md:w-auto overflow-x-auto">
+                    {['All', 'Urgent', 'Watch', 'Done'].map((tab) => {
+                      const count = (households || []).filter(h => {
+                        if (tab === 'Urgent') return h.risk_level === 'red';
+                        if (tab === 'Watch') return h.risk_level === 'amber';
+                        if (tab === 'Done') return h.risk_level === 'green';
+                        return true;
+                      }).length;
+                      
+                      const isActive = riskFilter === tab;
+                      return (
+                        <button
+                          key={tab}
+                          type="button"
+                          onClick={() => setRiskFilter(tab)}
+                          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                            isActive
+                              ? tab === 'Urgent'
+                                ? 'bg-red-600 text-white shadow-sm'
+                                : tab === 'Watch'
+                                  ? 'bg-amber-500 text-white shadow-sm'
+                                  : tab === 'Done'
+                                    ? 'bg-green-600 text-white shadow-sm'
+                                    : 'bg-[#1B6CA8] text-white shadow-sm'
+                              : 'text-gray-500 hover:text-gray-800'
+                          }`}
+                        >
+                          {tab}
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                            isActive ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500'
                           }`}>
-                            {hh.risk_level}
+                            {count}
                           </span>
-                        </td>
-                        <td className="py-4 text-gray-700 font-medium">{hh.members?.length || 0} members</td>
-                        <td className="py-4 text-right pr-4">
-                          <button
-                            onClick={() => {
-                              setVisitHhId(hh.id);
-                              if (hh.members && hh.members.length > 0) {
-                                setVisitMemberName(hh.members[0].name);
-                              }
-                              setShowVisitModal(true);
-                            }}
-                            className="text-[#1B6CA8] font-bold text-xs hover:underline flex items-center gap-1 ml-auto"
-                          >
-                            New Visit <ChevronRight size={14} />
-                          </button>
-                        </td>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-gray-100 text-xs font-bold text-gray-400 uppercase tracking-wider">
+                        <th className="pb-3 pl-4">Family Name</th>
+                        <th className="pb-3">Village</th>
+                        <th className="pb-3">Risk Status</th>
+                        <th className="pb-3">Family Size</th>
+                        <th className="pb-3 text-right pr-4">Actions</th>
                       </tr>
-                    ))}
-                    {hhLoading && (
-                      <tr>
-                        <td colSpan={5} className="py-8 text-center text-gray-400">Loading households data...</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50 text-sm">
+                      {filteredHouseholds.map((hh) => {
+                        const hasOffline = offlineVisits.some(ov => ov.household_id === hh.id);
+                        return (
+                          <tr key={hh.id} className="hover:bg-gray-50/50 transition-colors">
+                            <td className="py-4 pl-4 font-bold text-gray-800">
+                              <div className="flex items-center gap-2">
+                                <span>{hh.family_name}</span>
+                                {hasOffline && (
+                                  <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-amber-200">
+                                    <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
+                                    Pending Sync
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-4 text-gray-500">{hh.village}</td>
+                            <td className="py-4">
+                              <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                                hh.risk_level === 'red'
+                                  ? 'bg-red-50 text-red-600 border border-red-100'
+                                  : hh.risk_level === 'amber'
+                                    ? 'bg-amber-50 text-amber-600 border border-amber-100'
+                                    : 'bg-green-50 text-green-600 border border-green-100'
+                              }`}>
+                                {hh.risk_level}
+                              </span>
+                            </td>
+                            <td className="py-4 text-gray-700 font-medium">{hh.members?.length || 0} members</td>
+                            <td className="py-4 text-right pr-4">
+                              <button
+                                onClick={() => {
+                                  setVisitHhId(hh.id);
+                                  if (hh.members && hh.members.length > 0) {
+                                    setVisitMemberName(hh.members[0].name);
+                                  }
+                                  setShowVisitModal(true);
+                                }}
+                                className="text-[#1B6CA8] font-bold text-xs hover:underline flex items-center gap-1 ml-auto"
+                              >
+                                New Visit <ChevronRight size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {filteredHouseholds.length === 0 && !hhLoading && (
+                        <tr>
+                          <td colSpan={5} className="py-8 text-center text-gray-400 font-medium">
+                            No households found matching your search or filters.
+                          </td>
+                        </tr>
+                      )}
+                      {hhLoading && (
+                        <tr>
+                          <td colSpan={5} className="py-8 text-center text-gray-400">Loading households data...</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 
@@ -664,7 +1064,51 @@ export default function AshaDashboard() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Observed Symptoms / Transcription</label>
+                <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Preferred Clinic / Referral Facility</label>
+                <select
+                  value={visitPreferredHospital}
+                  onChange={(e) => setVisitPreferredHospital(e.target.value)}
+                  className="w-full p-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-green-500 text-sm cursor-pointer"
+                  required
+                >
+                  <option value="">-- Select Clinic --</option>
+                  {hospitals?.map(h => (
+                    <option key={h.id} value={h.name}>{h.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Observed Symptoms / Transcription</label>
+                  <div className="flex gap-2">
+                    {isRecording ? (
+                      <button
+                        type="button"
+                        onClick={stopRecording}
+                        className="bg-red-600 hover:bg-red-700 text-white px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm animate-pulse"
+                      >
+                        <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping" />
+                        Stop ({duration}s)
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={startRecording}
+                        className="bg-[#1B6CA8] hover:bg-[#155A8A] text-white px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                      >
+                        <Mic size={12} />
+                        Dictate
+                      </button>
+                    )}
+                    {isTranscribing && (
+                      <span className="text-[10px] text-gray-500 font-semibold animate-pulse flex items-center gap-1">
+                        <Sparkles size={10} className="animate-spin animate-pulse" />
+                        Transcribing...
+                      </span>
+                    )}
+                  </div>
+                </div>
                 <textarea
                   value={visitSymptoms}
                   onChange={(e) => setVisitSymptoms(e.target.value)}
@@ -673,6 +1117,23 @@ export default function AshaDashboard() {
                   className="w-full p-3 border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-green-500 text-sm"
                   required
                 />
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={handleAiRiskAnalysis}
+                    disabled={isAnalyzingRisk || !visitSymptoms.trim()}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${
+                      isAnalyzingRisk
+                        ? 'bg-purple-100 text-purple-700 cursor-not-allowed animate-pulse'
+                        : !visitSymptoms.trim()
+                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
+                          : 'bg-purple-600 hover:bg-purple-700 text-white'
+                    }`}
+                  >
+                    <Sparkles size={12} className={isAnalyzingRisk ? 'animate-spin' : ''} />
+                    {isAnalyzingRisk ? 'Analyzing with AI...' : 'Analyze Risk with AI'}
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-1">
