@@ -255,6 +255,7 @@ async def get_patient_record(patient_id: str, current_user: UserResponse = Depen
         # 5. Fetch ASHA details for "Loop Reflection"
         active_referral = await db.referrals.find_one({
             "patient_id": patient_id,
+            "to_hospital_id": current_user.hospital,
             "status": {"$in": ["pending", "accepted"]}
         })
         if active_referral:
@@ -278,6 +279,7 @@ async def get_patient_record(patient_id: str, current_user: UserResponse = Depen
         # Check for active referral even without consent (Connection 1 requirement)
         active_referral = await db.referrals.find_one({
             "patient_id": patient_id,
+            "to_hospital_id": current_user.hospital,
             "status": {"$in": ["pending", "accepted"]}
         })
         if active_referral:
@@ -630,14 +632,31 @@ async def create_referral(data: ReferralCreate, current_user: UserResponse = Dep
     }
     
     result = await db.referrals.insert_one(referral_doc)
+    referral_id = str(result.inserted_id)
     
     # Update current visit with referral info
     await db.visits.update_one(
         {"_id": ObjectId(data.visit_id)},
-        {"$set": {"out_referral_id": str(result.inserted_id)}}
+        {"$set": {"out_referral_id": referral_id}}
     )
     
-    return {"status": "success", "referral_id": str(result.inserted_id)}
+    # Bridge to the target hospital's OPD queue
+    await db.visits.insert_one({
+        "patient_id": data.patient_id,
+        "hospital_id": data.to_hospital_id,  # Target hospital name
+        "date": datetime.utcnow(),
+        "created_at": datetime.utcnow(),
+        "chief_complaint": f"Clinician Referral ({data.to_speciality}): {data.reason[:100]}...",
+        "status": "in_queue",
+        "appointment_type": "referred",
+        "risk_tag": "urgent" if data.urgency in ["urgent", "emergency"] else "watch",
+        "referred_by": f"Dr. {current_user.name}",
+        "referral_id": referral_id,
+        "diagnosis": [],
+        "prescriptions": []
+    })
+    
+    return {"status": "success", "referral_id": referral_id}
 
 # --- DIFFERENTIAL DIAGNOSIS ---
 
