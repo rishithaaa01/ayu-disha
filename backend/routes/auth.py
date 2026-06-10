@@ -3,7 +3,6 @@ from pydantic import BaseModel
 from typing import Optional
 from models.user import UserResponse, TokenResponse, ProfileCompleteRequest, UserRole
 from middleware.auth_middleware import get_current_user
-from services.firebase_service import verify_id_token
 from database import get_database
 from config import settings
 from datetime import datetime, timedelta
@@ -34,9 +33,8 @@ class SendOTPRequest(BaseModel):
     mobile: str
 
 class VerifyOTPRequest(BaseModel):
-    mobile: Optional[str] = None
-    otp: Optional[str] = None
-    firebase_token: Optional[str] = None
+    mobile: str
+    otp: str
     language: str = "en"
     
 class VerifyOTPResponse(BaseModel):
@@ -134,60 +132,35 @@ async def verify_otp(request: VerifyOTPRequest):
     try:
         db = get_database()
         if db is None:
-            print("❌ Database connection is None!")
             raise HTTPException(
                 status_code=503,
                 detail="Database connection is currently unavailable. Please check your network and try again."
             )
-            
-        mobile_number = None
-        
-        # 1. Check if verifying via Firebase ID Token
-        if request.firebase_token:
-            print("📲 Verifying Firebase Token...")
-            try:
-                mobile_number = verify_id_token(request.firebase_token)
-                print(f"✅ Token Verified. Mobile: {mobile_number}")
-            except Exception as e:
-                print(f"❌ Token Verification Failed: {e}")
-                raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
-        
-        # 2. Check if verifying via custom DB-backed OTP
-        elif request.mobile and request.otp:
-            mobile_number = request.mobile.strip().replace(" ", "")
-            if not mobile_number.startswith("+"):
-                mobile_number = "+91" + mobile_number
-                
-            otp_entered = request.otp.strip()
-            print(f"📲 Verifying DB-backed OTP for {mobile_number}...")
-            
-            # Master OTP bypass for demo / evaluator convenience (gated by debug flag)
-            if otp_entered == "123456" and settings.debug:
-                print(f"✅ Master OTP used for {mobile_number}")
-            else:
-                # Verify against our 'otps' collection
-                otp_record = await db.otps.find_one({
-                    "mobile": mobile_number,
-                    "otp": otp_entered,
-                    "expires_at": {"$gt": datetime.utcnow()}
-                })
-                
-                if not otp_record:
-                    print("❌ Invalid or expired OTP code")
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="Invalid or expired OTP code"
-                    )
-                    
-                # Delete OTP record to prevent reuse
-                await db.otps.delete_one({"_id": otp_record["_id"]})
-                print("✅ OTP verified and consumed.")
-            
+
+        mobile_number = request.mobile.strip().replace(" ", "")
+        if not mobile_number.startswith("+"):
+            mobile_number = "+91" + mobile_number
+
+        otp_entered = request.otp.strip()
+        print(f"📲 Verifying OTP for {mobile_number}...")
+
+        # Master OTP bypass for demo / evaluator convenience (gated by debug flag)
+        if otp_entered == "123456" and settings.debug:
+            print(f"✅ Master OTP used for {mobile_number}")
         else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Must provide either firebase_token or mobile and otp code."
-            )
+            otp_record = await db.otps.find_one({
+                "mobile": mobile_number,
+                "otp": otp_entered,
+                "expires_at": {"$gt": datetime.utcnow()}
+            })
+            if not otp_record:
+                print("❌ Invalid or expired OTP code")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid or expired OTP code"
+                )
+            await db.otps.delete_one({"_id": otp_record["_id"]})
+            print("✅ OTP verified and consumed.")
             
         print(f"🔍 Searching for user in collection 'users'...")
         try:
@@ -313,7 +286,13 @@ async def get_hospitals():
 
 @router.get("/villages")
 async def get_villages():
-    # For now returning a static list of villages in the Chennai district
+    db = get_database()
+    villages = await db.villages.find({}).to_list(length=200)
+    if villages:
+        for v in villages:
+            v["id"] = str(v.pop("_id"))
+        return villages
+    # Fallback: static list if no villages seeded yet
     return [
         {"id": "v1", "name": "Kolathur"},
         {"id": "v2", "name": "Madhavaram"},

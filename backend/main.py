@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from database import connect_to_mongo, close_mongo_connection, get_database
-from routes import auth, patients, asha, voice, clinician
+from routes import auth, patients, asha, voice, clinician, admin, pho
 from jobs.reminder_job import start_scheduler
 from contextlib import asynccontextmanager
 import logging
@@ -46,11 +46,13 @@ app.add_middleware(
 )
 
 # Registrer Routers: Priority Order
-app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
-app.include_router(asha.router, prefix="/api/asha", tags=["asha"])
-app.include_router(patients.router, prefix="/api/patients", tags=["patients"])
-app.include_router(voice.router, prefix="/api/voice", tags=["voice"])
-app.include_router(clinician.router, prefix="/api/clinician", tags=["clinician"])
+app.include_router(auth.router,      prefix="/api/auth",     tags=["auth"])
+app.include_router(asha.router,      prefix="/api/asha",     tags=["asha"])
+app.include_router(patients.router,  prefix="/api/patients", tags=["patients"])
+app.include_router(voice.router,     prefix="/api/voice",    tags=["voice"])
+app.include_router(clinician.router, prefix="/api/clinician",tags=["clinician"])
+app.include_router(admin.router,     prefix="/api/admin",    tags=["admin"])
+app.include_router(pho.router,       prefix="/api/pho",      tags=["pho"])
 
 @app.get("/")
 async def root():

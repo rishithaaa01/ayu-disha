@@ -4,16 +4,18 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { registerHousehold } from '../../services/ashaApi';
 import { openDatabase } from '../../database/database-sqlite';
+import { useAuthStore } from '../../store/authStore';
 
 export default function AddHouseholdScreen() {
   const router = useRouter();
+  const user = useAuthStore((state) => state.user);
   const [saving, setSaving] = useState(false);
   
   const [formData, setFormData] = useState({
     family_name: '',
-    village: 'Kolathur',
-    block: 'Chennai Block',
-    district: 'Chennai'
+    village: user?.village || '',
+    block: '',
+    district: user?.district || ''
   });
 
   const [members, setMembers] = useState<any[]>([]);

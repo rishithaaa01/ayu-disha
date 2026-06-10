@@ -51,7 +51,7 @@ export default function DoctorDashboard() {
       <View style={styles.topRow}>
         <View>
           <Text style={styles.welcomeText}>Namaste, Doctor</Text>
-          <Text style={styles.nameText}>{doctor?.name || 'Dr. Ramesh'}</Text>
+          <Text style={styles.nameText}>{doctor?.name || '—'}</Text>
         </View>
         <TouchableOpacity style={styles.notifButton}>
           <Ionicons name="notifications-outline" size={24} color="#1B6CA8" />

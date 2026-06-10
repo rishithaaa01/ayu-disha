@@ -12,7 +12,7 @@ export default function ConsentsScreen() {
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
   const [newConsent, setNewConsent] = useState({
-    granted_to_id: 'doc_123',
+    granted_to_id: '',
     granted_to_name: '',
     data_scope: 'full',
     expires_days: 30

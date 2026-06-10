@@ -8,6 +8,7 @@ import { useAuthStore } from '../../store/authStore';
 
 export default function AshaProfileScreen() {
   const router = useRouter();
+  const user = useAuthStore((state) => state.user);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -48,12 +49,14 @@ export default function AshaProfileScreen() {
         {/* Profile Card */}
         <View style={styles.profileCard}>
           <View style={styles.avatar}>
-             <Text style={styles.avatarText}>KD</Text>
+             <Text style={styles.avatarText}>
+               {user?.name ? user.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) : '?'}
+             </Text>
           </View>
           <View style={styles.profileMeta}>
-             <Text style={styles.name}>Kavitha Devi</Text>
-             <Text style={styles.metaRow}>ID: ASHA-9876543210</Text>
-             <Text style={styles.metaRow}>Kolathur Village • Chennai</Text>
+             <Text style={styles.name}>{user?.name || '—'}</Text>
+             <Text style={styles.metaRow}>Mobile: {user?.mobile || '—'}</Text>
+             <Text style={styles.metaRow}>{user?.village ? `${user.village} • ` : ''}{user?.district || '—'}</Text>
           </View>
         </View>
 

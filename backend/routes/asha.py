@@ -5,7 +5,7 @@ import tempfile
 from fastapi import APIRouter, Depends, HTTPException, Request, status, File, UploadFile
 from fastapi.responses import JSONResponse
 from typing import List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 from database import get_database
 from middleware.auth_middleware import get_current_user
 from models.user import UserResponse
@@ -120,10 +120,11 @@ async def submit_visit(visit: VisitCreate, current_user: UserResponse = Depends(
         await db.referrals.insert_one(ref_dict)
         
         # BRIDGE TO CLINICIAN QUEUE
-        # For testing, if hospital is AUTO_ASSIGNED, we send to the primary seed hospital
+        # If hospital is AUTO_ASSIGNED, find the first hospital in the DB
         target_hospital = ref_dict["to_hospital_id"]
         if target_hospital == "AUTO_ASSIGNED":
-            target_hospital = "Govt General Hospital Chennai"
+            first_hospital = await db.hospitals.find_one({})
+            target_hospital = first_hospital["name"] if first_hospital else "Unassigned"
             
         await db.visits.insert_one({
             "patient_id": visit.member_id,
@@ -300,13 +301,46 @@ async def get_referrals(current_user: UserResponse = Depends(get_current_user)):
 
 @router.get("/my-stats")
 async def get_stats(current_user: UserResponse = Depends(get_current_user)):
+    db = get_database()
+    asha_id = current_user.id
+    now = datetime.utcnow()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    total_households = await db.households.count_documents({"created_by": asha_id})
+    visits_this_month = await db.asha_visits.count_documents({
+        "asha_id": asha_id,
+        "created_at": {"$gte": month_start}
+    })
+    referrals_sent = await db.referrals.count_documents({
+        "asha_id": asha_id,
+        "created_at": {"$gte": month_start}
+    })
+    urgent_cases = await db.asha_visits.count_documents({
+        "asha_id": asha_id,
+        "created_at": {"$gte": month_start},
+        "risk_level": {"$in": ["URGENT", "urgent", "red"]}
+    })
+    total_referrals = await db.referrals.count_documents({"asha_id": asha_id})
+    seen_referrals = await db.referrals.count_documents({"asha_id": asha_id, "status": "seen"})
+    referrals_seen_pct = round((seen_referrals / total_referrals * 100), 1) if total_referrals > 0 else 0.0
+
+    # Households that haven't been visited in the last 14 days
+    two_weeks_ago = now - timedelta(days=14)
+    needs_visit = await db.households.count_documents({
+        "created_by": asha_id,
+        "$or": [
+            {"last_visit_date": {"$lt": two_weeks_ago}},
+            {"last_visit_date": {"$exists": False}}
+        ]
+    })
+
     return {
-        "total_households": 5,
-        "visits_this_month": 12,
-        "referrals_sent_this_month": 3,
-        "urgent_cases_detected": 1,
-        "referrals_seen_percentage": 66.0,
-        "households_needs_visit": 2
+        "total_households": total_households,
+        "visits_this_month": visits_this_month,
+        "referrals_sent_this_month": referrals_sent,
+        "urgent_cases_detected": urgent_cases,
+        "referrals_seen_percentage": referrals_seen_pct,
+        "households_needs_visit": needs_visit
     }
 
 @router.get("/nearby-facilities")
@@ -317,12 +351,12 @@ async def get_nearby_facilities(lat: float = None, lng: float = None, radius_km:
     results = []
     for h in hospitals:
         results.append({
-            "id": h["name"], # Use Name as ID to match doctor's hospital field
+            "id": h["name"],
             "name": h["name"],
             "type": h.get("type", "General Hospital"),
-            "distance": "1.2 km", 
-            "address": h.get("district", "Chennai"),
-            "phone": "+91 44 2345 6789"
+            "distance": None,
+            "address": h.get("district", ""),
+            "phone": h.get("phone", "")
         })
     return results
 @router.post("/transcribe")

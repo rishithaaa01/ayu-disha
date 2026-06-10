@@ -3,12 +3,11 @@ import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityInd
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import api from '../../services/api';
-import { isFirebaseAvailable, firebaseAuth, setConfirmationResult } from '../../services/firebaseAuth';
 
 export default function PhoneScreen() {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
-  
+
   const handleSendOTP = async () => {
     const cleanPhone = phone.replace(/ /g, '').trim();
     if (!cleanPhone || cleanPhone.length !== 10) {
@@ -17,27 +16,16 @@ export default function PhoneScreen() {
     }
     const fullPhone = `+91${cleanPhone}`;
     setLoading(true);
-    
     try {
-      if (isFirebaseAvailable && firebaseAuth) {
-        console.log('Sending OTP via Firebase Phone Auth:', fullPhone);
-        const confirmation = await firebaseAuth().signInWithPhoneNumber(fullPhone);
-        setConfirmationResult(confirmation);
-        Alert.alert("Success", "OTP sent to your phone via Firebase!");
-        router.push(`/(auth)/otp?phone=${encodeURIComponent(fullPhone)}&useFirebase=true`);
-      } else {
-        console.log('Sending OTP via DB-backed flow:', fullPhone);
-        const res = await api.post('/auth/send-otp', { mobile: fullPhone });
-        let msg = res.data.message || "OTP sent successfully!";
-        if (res.data.otp) {
-          msg += ` [DEV MODE - OTP: ${res.data.otp}]`;
-        }
-        Alert.alert("Success", msg);
-        router.push(`/(auth)/otp?phone=${encodeURIComponent(fullPhone)}&useFirebase=false`);
+      const res = await api.post('/auth/send-otp', { mobile: fullPhone });
+      let msg = res.data.message || "OTP sent successfully!";
+      if (res.data.otp) {
+        msg += ` [DEV MODE - OTP: ${res.data.otp}]`;
       }
+      Alert.alert("Success", msg);
+      router.push(`/(auth)/otp?phone=${encodeURIComponent(fullPhone)}`);
     } catch (e: any) {
-      console.error(e);
-      const errorMsg = e.message || "Failed to send OTP";
+      const errorMsg = e.response?.data?.detail || e.message || "Failed to send OTP";
       Alert.alert("Error", errorMsg);
     } finally {
       setLoading(false);
@@ -49,7 +37,7 @@ export default function PhoneScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.heading}>Enter your mobile number</Text>
-      
+
       <View style={styles.inputContainer}>
         <Text style={styles.prefix}>+91</Text>
         <TextInput
@@ -63,7 +51,7 @@ export default function PhoneScreen() {
         />
       </View>
 
-      <TouchableOpacity 
+      <TouchableOpacity
         style={[styles.button, (!isValidLength || loading) && styles.buttonDisabled]}
         onPress={handleSendOTP}
         disabled={!isValidLength || loading}
@@ -127,5 +115,5 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontSize: 18,
     fontWeight: 'bold',
-  }
+  },
 });

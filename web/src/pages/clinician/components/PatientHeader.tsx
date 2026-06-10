@@ -32,7 +32,7 @@ export default function PatientHeader({ patient, onStartConsultation, status }: 
           </div>
           
           <div className="flex items-center gap-4 text-xs text-[#888]">
-            <p className="font-mono">ABHA: {profile.abha_number || '00-0000-0000-0000'}</p>
+            <p className="font-mono">ABHA: {profile.abha_number || 'Not assigned'}</p>
             <div className="flex items-center gap-1 text-red-600 font-bold">
               <span className="uppercase text-[10px]">Allergies:</span>
               <div className="flex gap-1">

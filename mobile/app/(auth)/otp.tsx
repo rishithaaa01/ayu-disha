@@ -4,17 +4,16 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import api from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
-import { getConfirmationResult, isFirebaseAvailable } from '../../services/firebaseAuth';
 
 export default function OTPScreen() {
-  const { phone, useFirebase } = useLocalSearchParams();
+  const { phone } = useLocalSearchParams();
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(30);
   const login = useAuthStore(state => state.login);
 
   useEffect(() => {
-    let timer = setInterval(() => {
+    const timer = setInterval(() => {
       setCountdown((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
     return () => clearInterval(timer);
@@ -25,31 +24,17 @@ export default function OTPScreen() {
       Alert.alert("Error", "Please enter a valid 6-digit OTP");
       return;
     }
-
     setLoading(true);
     try {
-      let payload: any = { language: 'en' };
+      const response = await api.post('/auth/verify-otp', {
+        mobile: String(phone),
+        otp,
+        language: 'en',
+      });
 
-      if (useFirebase === 'true' && isFirebaseAvailable) {
-        console.log('Verifying OTP via Firebase confirmation session...');
-        const confirmation = getConfirmationResult();
-        if (!confirmation) {
-          throw new Error("Firebase confirmation session not found. Please request OTP again.");
-        }
-        const userCredential = await confirmation.confirm(otp);
-        const firebaseToken = await userCredential.user.getIdToken();
-        payload.firebase_token = firebaseToken;
-      } else {
-        console.log('Verifying OTP via DB-backed flow...');
-        payload.mobile = String(phone);
-        payload.otp = otp;
-      }
-
-      const response = await api.post('/auth/verify-otp', payload);
-      
       const { access_token, user, needs_registration } = response.data;
       await login(user, access_token);
-      
+
       if (needs_registration) {
         router.replace('/(auth)/register');
       } else {
@@ -57,17 +42,30 @@ export default function OTPScreen() {
       }
     } catch (e: any) {
       const errorMsg = e.response?.data?.detail || e.message || "Unknown Error";
-      console.error("Login Error:", errorMsg);
       Alert.alert("Verification Failed", errorMsg);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleResend = async () => {
+    if (countdown > 0) return;
+    try {
+      const res = await api.post('/auth/send-otp', { mobile: String(phone) });
+      let msg = res.data.message || "OTP resent!";
+      if (res.data.otp) msg += ` [DEV MODE - OTP: ${res.data.otp}]`;
+      Alert.alert("OTP Resent", msg);
+      setCountdown(30);
+      setOtp('');
+    } catch (e: any) {
+      Alert.alert("Error", e.response?.data?.detail || "Failed to resend OTP");
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.heading}>Enter the OTP sent to {phone}</Text>
-      
+
       <TextInput
         style={styles.input}
         keyboardType="numeric"
@@ -78,21 +76,23 @@ export default function OTPScreen() {
         textAlign="center"
       />
 
-      <TouchableOpacity 
+      <TouchableOpacity
         style={[styles.button, otp.length < 6 && styles.buttonDisabled]}
         onPress={handleVerify}
         disabled={otp.length < 6 || loading}
       >
         {loading ? (
-           <ActivityIndicator color={Colors.white} />
+          <ActivityIndicator color={Colors.white} />
         ) : (
-           <Text style={styles.buttonText}>Verify</Text>
+          <Text style={styles.buttonText}>Verify</Text>
         )}
       </TouchableOpacity>
 
-      <Text style={styles.timerText}>
-        {countdown > 0 ? `Resend OTP in ${countdown}s` : <Text style={styles.resendText}>Resend OTP</Text>}
-      </Text>
+      <TouchableOpacity onPress={handleResend} disabled={countdown > 0}>
+        <Text style={[styles.timerText, countdown === 0 && styles.resendText]}>
+          {countdown > 0 ? `Resend OTP in ${countdown}s` : 'Resend OTP'}
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -141,6 +141,6 @@ const styles = StyleSheet.create({
   },
   resendText: {
     color: Colors.action,
-    fontWeight: 'bold'
-  }
+    fontWeight: 'bold',
+  },
 });

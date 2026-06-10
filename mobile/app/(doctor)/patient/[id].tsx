@@ -91,7 +91,7 @@ export default function PatientDetail() {
           
           <View style={styles.idRow}>
             <Text style={styles.idLabel}>ABHA:</Text>
-            <Text style={styles.idValue}>{profile.abha_number || '00-0000-0000-0000'}</Text>
+            <Text style={styles.idValue}>{profile.abha_number || 'Not assigned'}</Text>
           </View>
 
           <View style={styles.basicsContainer}>
@@ -122,7 +122,7 @@ export default function PatientDetail() {
               <Text style={styles.referralTitle}>🔗 ASHA Field Referral</Text>
             </View>
             <View style={styles.referralInfoRow}>
-              <Text style={styles.referralSub}>Referred by: {record.active_referral.from_worker_name || 'Kavitha Devi'}</Text>
+              <Text style={styles.referralSub}>Referred by: {record.active_referral.from_worker_name || 'Unknown'}</Text>
               <Text style={styles.referralSub}>Sent: {new Date(record.active_referral.created_at).toLocaleDateString()}</Text>
             </View>
             

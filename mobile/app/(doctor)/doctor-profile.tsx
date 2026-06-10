@@ -23,7 +23,7 @@ export default function DoctorProfile() {
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{user?.name?.charAt(0) || 'D'}</Text>
           </View>
-          <Text style={styles.name}>{user?.name || 'Dr. Ramesh Kumar'}</Text>
+          <Text style={styles.name}>{user?.name || '—'}</Text>
           <Text style={styles.speciality}>{user?.role?.toUpperCase()} • GENERAL MEDICINE</Text>
         </View>
 
@@ -32,7 +32,7 @@ export default function DoctorProfile() {
             <Ionicons name="business-outline" size={20} color="#64748B" />
             <View>
               <Text style={styles.infoLabel}>Hospital</Text>
-              <Text style={styles.infoValue}>Govt General Hospital Chennai</Text>
+              <Text style={styles.infoValue}>{user?.hospital || '—'}</Text>
             </View>
           </View>
 
@@ -40,7 +40,7 @@ export default function DoctorProfile() {
             <Ionicons name="call-outline" size={20} color="#64748B" />
             <View>
               <Text style={styles.infoLabel}>Mobile</Text>
-              <Text style={styles.infoValue}>{user?.mobile || '+91 98765 43211'}</Text>
+              <Text style={styles.infoValue}>{user?.mobile || '—'}</Text>
             </View>
           </View>
         </View>

@@ -36,27 +36,16 @@ export default function AdminDashboard() {
 
   const { data: stats, isLoading, refetch } = useQuery({
     queryKey: ['adminStats'],
-    queryFn: () => api.get('/admin/stats').then(r => r.data).catch(() => ({
-      total_patients: 1240,
-      total_doctors: 48,
-      total_asha_workers: 312,
-      total_hospitals: 24,
-      visits_today: 187,
-      referrals_pending: 23,
-      high_risk_households: 41,
-      consents_active: 892,
-    })),
+    queryFn: () => api.get('/admin/stats').then(r => r.data),
     refetchInterval: 60000,
+    retry: 1,
   });
 
   const { data: recentActivity } = useQuery({
     queryKey: ['adminActivity'],
-    queryFn: () => api.get('/admin/activity').then(r => r.data).catch(() => [
-      { type: 'referral', message: 'ASHA Kavitha sent urgent referral for Ravi Kumar', time: '2 min ago', severity: 'urgent' },
-      { type: 'visit', message: 'Dr. Ramesh completed 12 consultations today', time: '15 min ago', severity: 'normal' },
-      { type: 'registration', message: '3 new patients registered in Vellore district', time: '1 hr ago', severity: 'normal' },
-      { type: 'alert', message: 'High-risk household flagged in Tiruvannamalai', time: '2 hr ago', severity: 'warning' },
-    ]),
+    queryFn: () => api.get('/admin/activity').then(r => r.data),
+    refetchInterval: 30000,
+    retry: 1,
   });
 
   const handleLogout = () => {
@@ -136,7 +125,6 @@ export default function AdminDashboard() {
                 subtitle="Registered on platform"
                 icon={Users}
                 color="bg-blue-100 text-blue-600"
-                trend={12}
               />
               <StatCard
                 title="Doctors"
@@ -144,7 +132,6 @@ export default function AdminDashboard() {
                 subtitle="Active clinicians"
                 icon={Activity}
                 color="bg-green-100 text-green-600"
-                trend={3}
               />
               <StatCard
                 title="ASHA Workers"
@@ -152,7 +139,6 @@ export default function AdminDashboard() {
                 subtitle="Community health workers"
                 icon={ShieldCheck}
                 color="bg-purple-100 text-purple-600"
-                trend={8}
               />
               <StatCard
                 title="Hospitals"

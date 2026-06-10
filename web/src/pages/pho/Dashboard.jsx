@@ -34,14 +34,7 @@ function MetricCard({ title, value, change, icon: Icon, color, alert }) {
   );
 }
 
-const DISEASE_DATA = [
-  { name: 'Dengue', cases: 34, trend: 'up', district: 'Vellore' },
-  { name: 'Malaria', cases: 12, trend: 'down', district: 'Tiruvannamalai' },
-  { name: 'Tuberculosis', cases: 8, trend: 'stable', district: 'Chennai' },
-  { name: 'Typhoid', cases: 21, trend: 'up', district: 'Kanchipuram' },
-  { name: 'Hypertension', cases: 156, trend: 'up', district: 'Multiple' },
-  { name: 'Diabetes', cases: 203, trend: 'up', district: 'Multiple' },
-];
+const DISEASE_DATA = []; // replaced by real API call below
 
 export default function PHODashboard() {
   const navigate = useNavigate();
@@ -50,17 +43,33 @@ export default function PHODashboard() {
 
   const { data: stats, isLoading, refetch } = useQuery({
     queryKey: ['phoStats'],
-    queryFn: () => api.get('/pho/stats').then(r => r.data).catch(() => ({
-      total_population_covered: 284000,
-      active_asha_workers: 312,
-      high_risk_households: 41,
-      referrals_this_month: 89,
-      immunization_coverage: 78,
-      maternal_health_cases: 23,
-      disease_alerts: 3,
-    })),
+    queryFn: () => api.get('/pho/stats').then(r => r.data),
     refetchInterval: 120000,
+    retry: 1,
   });
+
+  const { data: diseaseData = [] } = useQuery({
+    queryKey: ['phoDiseases'],
+    queryFn: () => api.get('/pho/disease-surveillance').then(r => r.data),
+    refetchInterval: 120000,
+    retry: 1,
+  });
+
+  const { data: ashaPerformance = [] } = useQuery({
+    queryKey: ['phoAshaPerf'],
+    queryFn: () => api.get('/pho/asha-performance').then(r => r.data),
+    retry: 1,
+  });
+
+  const { data: healthAlerts = [] } = useQuery({
+    queryKey: ['phoAlerts'],
+    queryFn: () => api.get('/pho/alerts').then(r => r.data),
+    refetchInterval: 60000,
+    retry: 1,
+  });
+
+
+
 
   const handleLogout = () => {
     logout();
@@ -177,7 +186,7 @@ export default function PHODashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {DISEASE_DATA.map((d, i) => (
+                    {(diseaseData.length > 0 ? diseaseData : []).map((d, i) => (
                       <tr key={i} className="hover:bg-gray-50 transition-colors">
                         <td className="px-6 py-4 font-semibold text-gray-800">{d.name}</td>
                         <td className="px-6 py-4">
@@ -208,30 +217,9 @@ export default function PHODashboard() {
                   <TrendingUp size={18} className="text-[#2C8C68]" />
                   Immunization Coverage
                 </h4>
-                <div className="space-y-3">
-                  {[
-                    { name: 'BCG', coverage: 94 },
-                    { name: 'DPT', coverage: 88 },
-                    { name: 'Polio', coverage: 91 },
-                    { name: 'Measles', coverage: 78 },
-                    { name: 'Hepatitis B', coverage: 82 },
-                  ].map(vax => (
-                    <div key={vax.name}>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="font-medium text-gray-700">{vax.name}</span>
-                        <span className={`font-bold ${vax.coverage >= 90 ? 'text-green-600' : vax.coverage >= 80 ? 'text-amber-600' : 'text-red-600'}`}>
-                          {vax.coverage}%
-                        </span>
-                      </div>
-                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${vax.coverage >= 90 ? 'bg-green-500' : vax.coverage >= 80 ? 'bg-amber-500' : 'bg-red-500'}`}
-                          style={{ width: `${vax.coverage}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <p className="text-sm text-gray-400 text-center py-8">
+                  Immunization module not yet available — data will appear here once connected.
+                </p>
               </div>
 
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
@@ -241,14 +229,13 @@ export default function PHODashboard() {
                 </h4>
                 <div className="space-y-4">
                   {[
-                    { label: 'Total Referrals', value: stats?.referrals_this_month || 89, color: 'text-blue-600' },
-                    { label: 'Accepted', value: 67, color: 'text-green-600' },
-                    { label: 'Pending', value: 15, color: 'text-amber-600' },
-                    { label: 'Emergency', value: 7, color: 'text-red-600' },
+                    { label: 'Total This Month', value: stats?.referrals_this_month, color: 'text-blue-600' },
+                    { label: 'Urgent / Pending', value: stats?.disease_alerts,       color: 'text-red-600' },
+                    { label: 'High-Risk Households', value: stats?.high_risk_households, color: 'text-amber-600' },
                   ].map(item => (
                     <div key={item.label} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
                       <span className="text-sm text-gray-600">{item.label}</span>
-                      <span className={`text-lg font-bold ${item.color}`}>{item.value}</span>
+                      <span className={`text-lg font-bold ${item.color}`}>{item.value ?? '—'}</span>
                     </div>
                   ))}
                 </div>
@@ -276,16 +263,12 @@ export default function PHODashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {[
-                    { name: 'Kavitha Devi', village: 'Periyapalayam', households: 48, visits: 34, referrals: 5, score: 92 },
-                    { name: 'Meena Kumari', village: 'Arani', households: 52, visits: 41, referrals: 3, score: 88 },
-                    { name: 'Lakshmi S.', village: 'Vandavasi', households: 39, visits: 28, referrals: 7, score: 85 },
-                    { name: 'Priya Nair', village: 'Cheyyar', households: 61, visits: 45, referrals: 4, score: 94 },
-                    { name: 'Radha Devi', village: 'Polur', households: 33, visits: 19, referrals: 2, score: 71 },
-                  ].map((worker, i) => (
+                  {ashaPerformance.length === 0 ? (
+                    <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-400">No ASHA workers found</td></tr>
+                  ) : ashaPerformance.map((worker, i) => (
                     <tr key={i} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 font-semibold text-gray-800">{worker.name}</td>
-                      <td className="px-6 py-4 text-gray-500">{worker.village}</td>
+                      <td className="px-6 py-4 text-gray-500">{worker.village || '—'}</td>
                       <td className="px-6 py-4 text-gray-700">{worker.households}</td>
                       <td className="px-6 py-4 text-gray-700">{worker.visits}</td>
                       <td className="px-6 py-4 text-gray-700">{worker.referrals}</td>
@@ -303,74 +286,27 @@ export default function PHODashboard() {
         )}
 
         {activeTab === 'maternal' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-              <h4 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <Heart size={18} className="text-pink-500" />
-                Maternal Health
-              </h4>
-              <div className="space-y-4">
-                {[
-                  { label: 'Antenatal Registrations', value: 23, color: 'bg-pink-100 text-pink-700' },
-                  { label: 'High-Risk Pregnancies', value: 4, color: 'bg-red-100 text-red-700' },
-                  { label: 'Institutional Deliveries', value: 18, color: 'bg-green-100 text-green-700' },
-                  { label: 'Postnatal Follow-ups', value: 31, color: 'bg-blue-100 text-blue-700' },
-                ].map(item => (
-                  <div key={item.label} className="flex items-center justify-between p-3 rounded-xl bg-gray-50">
-                    <span className="text-sm text-gray-700">{item.label}</span>
-                    <span className={`text-sm font-bold px-3 py-1 rounded-full ${item.color}`}>{item.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-              <h4 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <Baby size={18} className="text-blue-500" />
-                Child Health
-              </h4>
-              <div className="space-y-4">
-                {[
-                  { label: 'Under-5 Malnutrition', value: '12%', color: 'bg-amber-100 text-amber-700' },
-                  { label: 'Stunting Rate', value: '18%', color: 'bg-orange-100 text-orange-700' },
-                  { label: 'Fully Immunized', value: '84%', color: 'bg-green-100 text-green-700' },
-                  { label: 'Vitamin A Coverage', value: '76%', color: 'bg-yellow-100 text-yellow-700' },
-                ].map(item => (
-                  <div key={item.label} className="flex items-center justify-between p-3 rounded-xl bg-gray-50">
-                    <span className="text-sm text-gray-700">{item.label}</span>
-                    <span className={`text-sm font-bold px-3 py-1 rounded-full ${item.color}`}>{item.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
+            <Heart size={48} className="text-pink-300 mx-auto mb-4" />
+            <h3 className="text-lg font-bold text-gray-600">Maternal &amp; Child Health</h3>
+            <p className="text-gray-400 text-sm mt-2">
+              {stats?.maternal_health_cases !== undefined
+                ? `${stats.maternal_health_cases} maternal-related visits recorded this month.`
+                : 'Loading...'}
+            </p>
+            <p className="text-xs text-gray-300 mt-4">Full maternal health module coming in next release</p>
           </div>
         )}
 
         {activeTab === 'alerts' && (
           <div className="space-y-4">
-            {[
-              {
-                title: 'Dengue Cluster Detected',
-                desc: 'Unusual spike in dengue cases in Vellore district — 34 cases in 2 weeks. Immediate vector control recommended.',
-                severity: 'high',
-                time: '2 hours ago',
-                district: 'Vellore',
-              },
-              {
-                title: 'High-Risk Household Cluster',
-                desc: '5 households in Tiruvannamalai flagged as high-risk by ASHA workers. Maternal and child health follow-up needed.',
-                severity: 'medium',
-                time: '6 hours ago',
-                district: 'Tiruvannamalai',
-              },
-              {
-                title: 'Immunization Coverage Drop',
-                desc: 'Measles vaccination coverage dropped to 78% in Kanchipuram. Below national target of 90%.',
-                severity: 'medium',
-                time: '1 day ago',
-                district: 'Kanchipuram',
-              },
-            ].map((alert, i) => (
+            {healthAlerts.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
+                <AlertTriangle size={48} className="text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-500 font-semibold">No active health alerts</p>
+                <p className="text-gray-400 text-sm mt-1">All households and referrals are under control</p>
+              </div>
+            ) : healthAlerts.map((alert, i) => (
               <div key={i} className={`bg-white rounded-2xl border shadow-sm p-6 ${
                 alert.severity === 'high' ? 'border-red-200' : 'border-amber-200'
               }`}>

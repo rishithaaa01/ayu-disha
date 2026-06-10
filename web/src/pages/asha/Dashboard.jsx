@@ -258,7 +258,7 @@ export default function AshaDashboard() {
           try {
             const referralPayload = {
               household_id: finalVisit.household_id,
-              to_hospital_id: finalVisit.preferred_hospital || hospitals?.[0]?.name || "Govt General Hospital Chennai",
+              to_hospital_id: finalVisit.preferred_hospital || hospitals?.[0]?.name || "",
               urgency: "Today",
               ai_summary: finalVisit.ai_reasoning || 'Severe symptoms detected during offline field screening.',
               notes: `Automatic referral generated from offline visit. Symptoms: ${finalVisit.observations.symptoms || "Severe complaints"}`
@@ -293,38 +293,26 @@ export default function AshaDashboard() {
   // Queries
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery({
     queryKey: ['ashaStats'],
-    queryFn: () => api.get('/asha/my-stats').then(r => r.data).catch(() => ({
-      total_households: 5,
-      visits_this_month: 12,
-      referrals_sent_this_month: 3,
-      urgent_cases_detected: 1,
-      referrals_seen_percentage: 66.0,
-      households_needs_visit: 2
-    }))
+    queryFn: () => api.get('/asha/my-stats').then(r => r.data),
+    retry: 1,
   });
 
   const { data: households, isLoading: hhLoading, refetch: refetchHh } = useQuery({
     queryKey: ['ashaHouseholds'],
-    queryFn: () => api.get('/asha/households').then(r => r.data).catch(() => [
-      { id: '1', family_name: 'Sharma Family', village: 'Adyar', risk_level: 'green', members: [{ name: 'Aarav Sharma', age: 34, gender: 'male' }] },
-      { id: '2', family_name: 'Patel Family', village: 'Velachery', risk_level: 'amber', members: [{ name: 'Diya Patel', age: 28, gender: 'female' }] },
-      { id: '3', family_name: 'Kumar Family', village: 'Adyar', risk_level: 'red', members: [{ name: 'Ramesh Kumar', age: 62, gender: 'male' }] }
-    ])
+    queryFn: () => api.get('/asha/households').then(r => r.data),
+    retry: 1,
   });
 
   const { data: referrals, isLoading: refLoading, refetch: refetchRef } = useQuery({
     queryKey: ['ashaReferrals'],
-    queryFn: () => api.get('/asha/referrals').then(r => r.data).catch(() => [
-      { id: 'r1', patient_name: 'Ramesh Kumar', referred_to: 'Govt General Hospital Chennai', urgency: 'Today', sent_date: '09 Jun, 18:30', status: 'pending' },
-      { id: 'r2', patient_name: 'Diya Patel', referred_to: 'Velachery PHC', urgency: 'Watch', sent_date: '08 Jun, 11:20', status: 'seen' }
-    ])
+    queryFn: () => api.get('/asha/referrals').then(r => r.data),
+    retry: 1,
   });
+
   const { data: hospitals } = useQuery({
     queryKey: ['nearbyHospitals'],
-    queryFn: () => api.get('/auth/hospitals').then(r => r.data).catch(() => [
-      { id: 'h1', name: 'Govt General Hospital Chennai' },
-      { id: 'h2', name: 'Velachery PHC' }
-    ])
+    queryFn: () => api.get('/auth/hospitals').then(r => r.data),
+    retry: 1,
   });
   const handleLogout = () => {
     logout();
@@ -424,7 +412,7 @@ export default function AshaDashboard() {
         try {
           const refPayload = {
             household_id: visitHhId,
-            to_hospital_id: visitPreferredHospital || hospitals?.[0]?.name || "Govt General Hospital Chennai",
+            to_hospital_id: visitPreferredHospital || hospitals?.[0]?.name || "",
             urgency: 'Today',
             ai_summary: visitReasoning || 'Urgent AI classified risk.',
             notes: `Automatic doctor referral for severe risk observations. Symptoms: ${visitSymptoms}`
@@ -467,7 +455,7 @@ export default function AshaDashboard() {
           needs_ai: !visitReasoning || visitReasoning.includes('Offline mode') || visitReasoning.includes('Unable to reach') || visitReasoning.includes('missing API key'),
           needs_transcription: !!base64Audio,
           audio_base64: base64Audio,
-          preferred_hospital: visitPreferredHospital || hospitals?.[0]?.name || "Govt General Hospital Chennai",
+          preferred_hospital: visitPreferredHospital || hospitals?.[0]?.name || "",
           created_at: new Date().toISOString()
         };
         
@@ -540,7 +528,7 @@ export default function AshaDashboard() {
         <div className="flex items-center gap-4">
           <div className="text-right hidden sm:block">
             <p className="text-sm font-bold text-gray-800">{user?.name || 'ASHA Worker'}</p>
-            <p className="text-xs text-[#1B6CA8] font-semibold">{user?.village || 'Adyar Village'}</p>
+            <p className="text-xs text-[#1B6CA8] font-semibold">{user?.village || user?.district || '—'}</p>
           </div>
           <button
             onClick={() => {
@@ -626,21 +614,19 @@ export default function AshaDashboard() {
             value={stats?.total_households}
             icon={Home}
             color="bg-blue-50 text-blue-600"
-            change="5 active targets"
           />
           <MetricCard
             title="Field Visits (Month)"
             value={stats?.visits_this_month}
             icon={Users}
             color="bg-green-50 text-green-600"
-            change="+4 from last week"
           />
           <MetricCard
             title="Hospital Referrals"
             value={stats?.referrals_sent_this_month}
             icon={ArrowUpRight}
             color="bg-purple-50 text-purple-600"
-            change={`${stats?.referrals_seen_percentage}% seen by doctor`}
+            change={`${stats?.referrals_seen_percentage ?? '—'}% seen by doctor`}
           />
           <MetricCard
             title="Urgent Alerts"
@@ -648,7 +634,6 @@ export default function AshaDashboard() {
             icon={AlertTriangle}
             color="bg-red-50 text-red-600"
             alert={stats?.urgent_cases_detected > 0}
-            change="1 action pending"
           />
         </div>
 

@@ -69,7 +69,7 @@ export default function TestsScreen() {
           </View>
           <View style={styles.bannerContent}>
             <Text style={styles.bannerTitle}>🧪 New lab tests ordered</Text>
-            <Text style={styles.bannerText}>Dr. Ramesh ordered new tests. Book your home sample collection now.</Text>
+            <Text style={styles.bannerText}>New lab tests have been ordered. Book your home sample collection now.</Text>
           </View>
           <TouchableOpacity style={styles.bookButton}>
             <Text style={styles.bookButtonText}>BOOK</Text>

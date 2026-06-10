@@ -9,6 +9,10 @@ export interface User {
   role: string;
   language: string;
   district?: string;
+  hospital?: string;
+  village?: string;
+  email?: string;
+  is_profile_complete?: boolean;
 }
 
 interface AuthState {

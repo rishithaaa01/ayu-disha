@@ -10,9 +10,11 @@ import { useAuthStore } from '../../store/authStore';
 
 export default function VillageScreen() {
   const router = useRouter();
+  const user = useAuthStore((state) => state.user);
   const [households, setHouseholds] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('All');
+  const [visitsToday, setVisitsToday] = useState(0);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -33,12 +35,9 @@ export default function VillageScreen() {
           open_issues: []
         })));
       } else {
-        // 2. Fetch from API if local is empty (initial load)
         try {
           const data = await getHouseholds();
           setHouseholds(data);
-          
-          // Seed local database
           for (const h of data) {
              await db.runAsync(`
                INSERT OR REPLACE INTO asha_households (
@@ -48,9 +47,16 @@ export default function VillageScreen() {
           }
         } catch (apiErr: any) {
           console.warn('API Fetch failed in VillageScreen:', apiErr.message);
-          setHouseholds([]); // Keep empty if offline and no local data
+          setHouseholds([]);
         }
       }
+
+      // Count visits done today from local DB
+      const today = new Date().toISOString().split('T')[0];
+      const todayVisits: any[] = await db.getAllAsync(
+        `SELECT * FROM asha_visits WHERE created_at LIKE '${today}%'`
+      );
+      setVisitsToday(todayVisits.length);
     } catch (e) {
       console.warn('Failed to load households', e);
     } finally {
@@ -84,7 +90,7 @@ export default function VillageScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Ayu Disha</Text>
-          <Text style={styles.headerSubtitle}>Kavitha Devi • ASHA Worker</Text>
+          <Text style={styles.headerSubtitle}>{user?.name || 'ASHA Worker'}</Text>
         </View>
         <SyncIndicator />
       </View>
@@ -96,11 +102,11 @@ export default function VillageScreen() {
           <Text style={styles.summaryLabel}>Households</Text>
         </View>
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryValue}>2</Text>
+          <Text style={styles.summaryValue}>{visitsToday}</Text>
           <Text style={styles.summaryLabel}>Visits Today</Text>
         </View>
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryValue}>0</Text>
+          <Text style={styles.summaryValue}>{households.filter(h => !h.synced).length}</Text>
           <Text style={styles.summaryLabel}>Pending Sync</Text>
         </View>
       </View>
