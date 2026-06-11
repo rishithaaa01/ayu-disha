@@ -23,7 +23,9 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
         user_id: str = payload.get("sub")
-        if user_id is None:
+        jti: str = payload.get("jti")
+        token_type: str = payload.get("type")
+        if user_id is None or token_type != "access":
             raise credentials_exception
     except JWTError:
         raise credentials_exception
@@ -35,10 +37,14 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             detail="Database connection is unavailable. Check your Wi-Fi or use a Mobile Hotspot.",
         )
         
+    if jti:
+        denied = await db.denied_tokens.find_one({"jti": jti})
+        if denied:
+            raise credentials_exception
+
     try:
         user_dict = await db.users.find_one({"_id": ObjectId(user_id)})
     except Exception as e:
-        print(f"Auth Error: {e}")
         raise credentials_exception
 
     if user_dict is None:

@@ -5,6 +5,7 @@ from database import connect_to_mongo, close_mongo_connection, get_database
 from routes import auth, patients, asha, voice, clinician, admin, pho
 from jobs.reminder_job import start_scheduler
 from contextlib import asynccontextmanager
+from config import settings
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -20,27 +21,38 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Ayu Disha API", lifespan=lifespan)
 
-# Radar Middleware: Capture everything
+# Standard Security Headers Middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"] = "default-src 'self'"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
+# Radar Middleware: Sanitized
 @app.middleware("http")
 async def radar_middleware(request: Request, call_next):
-    print(f"[RADAR]: {request.method} {request.url}")
-    # Debug: Print Auth Header
-    auth = request.headers.get("Authorization", "MISSING")
-    
+    # Log only method and path to prevent leaking auth headers/tokens or sensitive info in query strings
+    print(f"[RADAR]: {request.method} {request.url.path}")
     try:
         response = await call_next(request)
         if response.status_code >= 400:
             print(f"[WARNING] {response.status_code} DETECTED on {request.url.path}")
         return response
     except Exception as e:
-        print(f"[CRASH] RADAR CRASH: {str(e)}")
+        print("[CRASH] RADAR CRASH")
         raise e
 
 # Setup CORS (Must be registered last to wrap all other middleware)
+origins = [o.strip() for o in settings.allowed_origins.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex="https?://.*",
-    allow_credentials=True,
+    allow_origins=origins,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

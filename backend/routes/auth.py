@@ -2,13 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from typing import Optional
 from models.user import UserResponse, TokenResponse, ProfileCompleteRequest, UserRole
-from middleware.auth_middleware import get_current_user
+from middleware.auth_middleware import get_current_user, security
+from fastapi.security import HTTPAuthorizationCredentials
 from database import get_database
 from config import settings
 from datetime import datetime, timedelta
 from jose import jwt
 from bson import ObjectId
 import random
+import uuid
 from services.sms_service import sms_service
 from services.email_service import email_service
 import bcrypt
@@ -40,6 +42,7 @@ class VerifyOTPRequest(BaseModel):
     
 class VerifyOTPResponse(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     user: UserResponse
     is_new_user: bool
@@ -69,16 +72,47 @@ class ResetPasswordRequest(BaseModel):
     code: str
     new_password: str
 
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+class LogoutRequest(BaseModel):
+    refresh_token: str
+
 def create_access_token(data: dict):
     to_encode = data.copy()
+    jti = str(uuid.uuid4())
     expire = datetime.utcnow() + timedelta(minutes=settings.jwt_expire_minutes)
-    to_encode.update({"exp": expire})
+    to_encode.update({
+        "exp": expire,
+        "jti": jti,
+        "type": "access"
+    })
     encoded_jwt = jwt.encode(to_encode, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return encoded_jwt, jti
+
+async def create_refresh_token(user_id: str, db) -> str:
+    jti = str(uuid.uuid4())
+    expire = datetime.utcnow() + timedelta(days=7)
+    payload = {
+        "sub": user_id,
+        "exp": expire,
+        "jti": jti,
+        "type": "refresh"
+    }
+    encoded_jwt = jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    
+    await db.refresh_tokens.insert_one({
+        "jti": jti,
+        "user_id": user_id,
+        "expires_at": expire,
+        "revoked": False,
+        "created_at": datetime.utcnow()
+    })
     return encoded_jwt
 
 @router.post("/send-otp")
 async def send_otp(request: SendOTPRequest):
-    print(f"\n--- 📲 OTP Request: {datetime.utcnow().isoformat()} ---")
+    print(f"\n---  OTP Request: {datetime.utcnow().isoformat()} ---")
     db = get_database()
     if db is None:
         raise HTTPException(
@@ -129,7 +163,7 @@ async def send_otp(request: SendOTPRequest):
 
 @router.post("/verify-otp", response_model=VerifyOTPResponse)
 async def verify_otp(request: VerifyOTPRequest):
-    print(f"\n--- 🔐 Login Attempt: {datetime.utcnow().isoformat()} ---")
+    print(f"\n---  Login Attempt: {datetime.utcnow().isoformat()} ---")
     
     try:
         db = get_database()
@@ -144,38 +178,34 @@ async def verify_otp(request: VerifyOTPRequest):
             mobile_number = "+91" + mobile_number
 
         otp_entered = request.otp.strip()
-        print(f"📲 Verifying OTP for {mobile_number}...")
+        print(" Verifying OTP...")
 
-        # Master OTP bypass for demo / evaluator convenience (gated by debug flag)
-        if otp_entered == "123456" and settings.debug:
-            print(f"✅ Master OTP used for {mobile_number}")
-        else:
-            otp_record = await db.otps.find_one({
-                "mobile": mobile_number,
-                "otp": otp_entered,
-                "expires_at": {"$gt": datetime.utcnow()}
-            })
-            if not otp_record:
-                print("❌ Invalid or expired OTP code")
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid or expired OTP code"
-                )
-            await db.otps.delete_one({"_id": otp_record["_id"]})
-            print("✅ OTP verified and consumed.")
+        otp_record = await db.otps.find_one({
+            "mobile": mobile_number,
+            "otp": otp_entered,
+            "expires_at": {"$gt": datetime.utcnow()}
+        })
+        if not otp_record:
+            print(" Invalid or expired OTP code")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired OTP code"
+            )
+        await db.otps.delete_one({"_id": otp_record["_id"]})
+        print(" OTP verified and consumed.")
             
-        print(f"🔍 Searching for user in collection 'users'...")
+        print(" Searching for user in collection 'users'...")
         try:
             user = await db.users.find_one({"mobile": mobile_number})
-            print(f"✅ Database search complete. Found: {bool(user)}")
+            print(f" Database search complete. Found: {bool(user)}")
         except Exception as db_err:
-            print(f"❌ Database Search Error: {db_err}")
-            raise HTTPException(status_code=503, detail=f"Database search timed out or failed: {str(db_err)}")
+            print(" Database Search Error")
+            raise HTTPException(status_code=503, detail="Database search timed out or failed")
             
         is_new_user = False
         
         if not user:
-            print(f"📝 Registering new user: {mobile_number}")
+            print(" Registering new user...")
             is_new_user = True
             new_user_data = {
                 "name": None,
@@ -191,12 +221,12 @@ async def verify_otp(request: VerifyOTPRequest):
                 new_user_data["id"] = user_id
                 new_user_data.pop("_id", None)
                 user_response = UserResponse(**new_user_data)
-                print(f"✅ New user created with ID: {user_id}")
+                print(" New user created")
             except Exception as ins_err:
-                print(f"❌ User Registration Failed: {ins_err}")
-                raise HTTPException(status_code=500, detail=f"Failed to create user record: {str(ins_err)}")
+                print(" User Registration Failed")
+                raise HTTPException(status_code=500, detail="Failed to create user record")
         else:
-            print(f"👤 Existing user found: {mobile_number}")
+            print(" Existing user found")
             try:
                 user_id = str(user.pop("_id"))
                 user["id"] = user_id
@@ -205,18 +235,20 @@ async def verify_otp(request: VerifyOTPRequest):
                 if "is_profile_complete" not in user:
                     user["is_profile_complete"] = True if user.get("name") and user.get("role") else False
                 user_response = UserResponse(**user)
-                print(f"✅ User response object constructed for ID: {user_id}")
+                print(" User response object constructed")
             except Exception as val_err:
-                print(f"❌ User Data Validation Failed: {val_err}")
-                raise HTTPException(status_code=500, detail=f"Found user data but it's corrupted or incomplete: {str(val_err)}")
+                print(" User Data Validation Failed")
+                raise HTTPException(status_code=500, detail="Found user data but it's corrupted or incomplete")
             
-        print("🎟️ Generating access token...")
+        print(" Generating tokens...")
         role_value = str(user_response.role.value) if user_response.role else "none"
-        access_token = create_access_token({"sub": user_id, "role": role_value})
+        access_token, _ = create_access_token({"sub": user_id, "role": role_value})
+        refresh_token = await create_refresh_token(user_id, db)
         
-        print(f"✨ Login Success! User needs registration: {not user_response.is_profile_complete}")
+        print(f" Login Success! User needs registration: {not user_response.is_profile_complete}")
         return VerifyOTPResponse(
             access_token=access_token,
+            refresh_token=refresh_token,
             user=user_response,
             is_new_user=is_new_user,
             needs_registration=not user_response.is_profile_complete
@@ -225,12 +257,10 @@ async def verify_otp(request: VerifyOTPRequest):
     except HTTPException:
         raise
     except Exception as global_err:
-        print(f"🛑 CRITICAL ERROR in verify_otp: {global_err}")
-        import traceback
-        traceback.print_exc()
+        print(" CRITICAL ERROR in verify_otp")
         raise HTTPException(
             status_code=500, 
-            detail=f"An unexpected internal error occurred: {str(global_err)}"
+            detail="An unexpected internal error occurred"
         )
 
 @router.post("/complete-profile", response_model=UserResponse)
@@ -257,7 +287,7 @@ async def complete_profile(request: ProfileCompleteRequest, current_user: UserRe
     if request.role == UserRole.patient:
         existing_patient = await db.patients.find_one({"user_id": current_user.id})
         if not existing_patient:
-            print(f"📝 Automatically creating patient profile for user_id: {current_user.id}")
+            print(f" Automatically creating patient profile for user_id: {current_user.id}")
             patient_data = {
                 "user_id": current_user.id,
                 "name": request.name,
@@ -272,7 +302,7 @@ async def complete_profile(request: ProfileCompleteRequest, current_user: UserRe
                 "created_at": datetime.utcnow()
             }
             await db.patients.insert_one(patient_data)
-            print("✅ Patient profile created.")
+            print(" Patient profile created.")
 
     updated_user = await db.users.find_one({"_id": ObjectId(current_user.id)})
     user_id = str(updated_user.pop("_id"))
@@ -305,12 +335,117 @@ async def get_villages():
     ]
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(current_user: UserResponse = Depends(get_current_user)):
-    access_token = create_access_token({"sub": current_user.id, "role": current_user.role.value})
+async def refresh_token_endpoint(request: RefreshRequest):
+    token = request.refresh_token.strip()
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database connection is currently unavailable.")
+        
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired refresh token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        jti: str = payload.get("jti")
+        sub: str = payload.get("sub")
+        token_type: str = payload.get("type")
+        if not jti or not sub or token_type != "refresh":
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+        
+    stored_token = await db.refresh_tokens.find_one({"jti": jti})
+    if not stored_token:
+        raise credentials_exception
+        
+    if stored_token.get("revoked", False):
+        # Rotation reuse defense: revoke all sessions for this user!
+        await db.refresh_tokens.update_many(
+            {"user_id": sub},
+            {"$set": {"revoked": True}}
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token has been reused. All sessions revoked.",
+        )
+        
+    if stored_token.get("expires_at") < datetime.utcnow():
+        raise credentials_exception
+        
+    user = await db.users.find_one({"_id": ObjectId(sub)})
+    if not user:
+        raise credentials_exception
+        
+    user_id = str(user.pop("_id"))
+    user["id"] = user_id
+    user.pop("password_hash", None)
+    
+    if "is_profile_complete" not in user:
+        user["is_profile_complete"] = True if user.get("name") and user.get("role") else False
+    if "created_at" not in user:
+        user["created_at"] = datetime.utcnow()
+        
+    user_response = UserResponse(**user)
+    
+    # Revoke the old refresh token
+    await db.refresh_tokens.update_one(
+        {"jti": jti},
+        {"$set": {"revoked": True}}
+    )
+    
+    # Generate new tokens
+    role_value = str(user_response.role.value) if user_response.role else "none"
+    access_token, _ = create_access_token({"sub": user_id, "role": role_value})
+    new_refresh_token = await create_refresh_token(user_id, db)
+    
     return TokenResponse(
         access_token=access_token,
-        user=current_user
+        refresh_token=new_refresh_token,
+        user=user_response
     )
+
+@router.post("/logout")
+async def logout(
+    request: LogoutRequest,
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database connection is currently unavailable.")
+        
+    refresh_token = request.refresh_token.strip()
+    try:
+        payload = jwt.decode(refresh_token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        jti = payload.get("jti")
+        token_type = payload.get("type")
+        if jti and token_type == "refresh":
+            await db.refresh_tokens.update_one(
+                {"jti": jti},
+                {"$set": {"revoked": True}}
+            )
+    except Exception:
+        pass
+        
+    access_token = credentials.credentials
+    try:
+        payload = jwt.decode(access_token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        access_jti = payload.get("jti")
+        exp = payload.get("exp")
+        if access_jti and exp:
+            exp_datetime = datetime.utcfromtimestamp(exp)
+            await db.denied_tokens.insert_one({
+                "jti": access_jti,
+                "expires_at": exp_datetime,
+                "created_at": datetime.utcnow()
+            })
+    except Exception:
+        pass
+        
+    return {"status": "success", "message": "Successfully logged out."}
 
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: UserResponse = Depends(get_current_user)):
@@ -318,7 +453,7 @@ async def get_me(current_user: UserResponse = Depends(get_current_user)):
 
 @router.post("/register", response_model=VerifyOTPResponse)
 async def register(request: UserRegisterRequest):
-    print(f"\n--- 📝 Registration Attempt: {datetime.utcnow().isoformat()} ---")
+    print(f"\n---  Registration Attempt: {datetime.utcnow().isoformat()} ---")
     db = get_database()
     if db is None:
         raise HTTPException(status_code=503, detail="Database connection is currently unavailable.")
@@ -377,21 +512,23 @@ async def register(request: UserRegisterRequest):
                 "created_at": datetime.utcnow()
             }
             await db.patients.insert_one(patient_data)
-            print("✅ Linked Patient profile created.")
+            print(" Linked Patient profile created.")
 
         new_user_data.pop("password_hash", None)
         new_user_data.pop("_id", None)
         user_response = UserResponse(**new_user_data)
         
     except Exception as ins_err:
-        print(f"❌ User Registration Failed: {ins_err}")
-        raise HTTPException(status_code=500, detail=f"Failed to create user record: {str(ins_err)}")
+        print(" User Registration Failed")
+        raise HTTPException(status_code=500, detail="Failed to create user record")
 
-    print(f"✅ User registered and profile completed. ID: {user_id}")
-    access_token = create_access_token({"sub": user_id, "role": request.role.value})
+    print(" User registered and profile completed.")
+    access_token, _ = create_access_token({"sub": user_id, "role": request.role.value})
+    refresh_token = await create_refresh_token(user_id, db)
     
     return VerifyOTPResponse(
         access_token=access_token,
+        refresh_token=refresh_token,
         user=user_response,
         is_new_user=True,
         needs_registration=False
@@ -399,7 +536,7 @@ async def register(request: UserRegisterRequest):
 
 @router.post("/login", response_model=VerifyOTPResponse)
 async def login(request: UserLoginRequest):
-    print(f"\n--- 🔑 Credentials Login Attempt: {datetime.utcnow().isoformat()} ---")
+    print(f"\n---  Credentials Login Attempt: {datetime.utcnow().isoformat()} ---")
     db = get_database()
     if db is None:
         raise HTTPException(status_code=503, detail="Database connection is currently unavailable.")
@@ -440,11 +577,13 @@ async def login(request: UserLoginRequest):
     user_response = UserResponse(**user)
     
     role_value = str(user_response.role.value) if user_response.role else "none"
-    access_token = create_access_token({"sub": user_id, "role": role_value})
+    access_token, _ = create_access_token({"sub": user_id, "role": role_value})
+    refresh_token = await create_refresh_token(user_id, db)
     
-    print(f"✅ Credentials login success for user: {user_id}")
+    print(" Credentials login success")
     return VerifyOTPResponse(
         access_token=access_token,
+        refresh_token=refresh_token,
         user=user_response,
         is_new_user=False,
         needs_registration=not user_response.is_profile_complete
@@ -452,7 +591,7 @@ async def login(request: UserLoginRequest):
 
 @router.post("/forgot-password")
 async def forgot_password(request: ForgotPasswordRequest):
-    print(f"\n--- 🔔 Forgot Password Request: {datetime.utcnow().isoformat()} ---")
+    print(f"\n---  Forgot Password Request: {datetime.utcnow().isoformat()} ---")
     db = get_database()
     if db is None:
         raise HTTPException(status_code=503, detail="Database connection is currently unavailable.")
@@ -475,28 +614,28 @@ async def forgot_password(request: ForgotPasswordRequest):
         "expires_at": expires_at
     })
 
-    print("\n" + "╔" + "═"*50 + "╗")
-    print("║             [PASSWORD RESET CODE]                ║")
-    print(f"║ Email: {email_clean:<21} Code: {reset_code:<15} ║")
-    print("║ Valid for 15 minutes                             ║")
-    print("╚" + "═"*50 + "╝\n")
-
     # Send email reset code via SMTP
     email_sent = await email_service.send_reset_code(email_clean, reset_code)
 
     if email_sent:
         msg = "Password reset code sent. Please check your email inbox."
     else:
-        msg = "Password reset code generated. Check server console logs (SMTP credentials not configured)."
+        msg = "Password reset code generated."
 
-    return {
+    response_data = {
         "status": "success", 
         "message": msg
     }
+    
+    # Return reset code for development if SMTP is not configured
+    if not email_sent and settings.debug:
+        response_data["reset_code"] = reset_code
+
+    return response_data
 
 @router.post("/reset-password")
 async def reset_password(request: ResetPasswordRequest):
-    print(f"\n--- 🔑 Reset Password: {datetime.utcnow().isoformat()} ---")
+    print(f"\n---  Reset Password: {datetime.utcnow().isoformat()} ---")
     db = get_database()
     if db is None:
         raise HTTPException(status_code=503, detail="Database connection is currently unavailable.")
@@ -522,5 +661,5 @@ async def reset_password(request: ResetPasswordRequest):
 
     await db.password_resets.delete_one({"_id": reset_record["_id"]})
 
-    print(f"✅ Password reset successfully for: {email_clean}")
+    print(" Password reset successfully")
     return {"status": "success", "message": "Password reset successfully. You can now log in."}

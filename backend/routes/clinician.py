@@ -12,7 +12,29 @@ import json
 import os
 import tempfile
 import shutil
+import time
+import uuid
+from collections import defaultdict
 from services.transcription_service import transcription_service
+
+rate_limit_store = defaultdict(list)
+
+def check_rate_limit(key: str, limit: int, window: int) -> bool:
+    now = time.time()
+    rate_limit_store[key] = [t for t in rate_limit_store[key] if now - t < window]
+    if len(rate_limit_store[key]) >= limit:
+        return False
+    rate_limit_store[key].append(now)
+    return True
+
+def safe_object_id(id_str: str):
+    try:
+        return ObjectId(id_str)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail=f"Invalid ID format: {id_str}. Must be a 24-character hex string."
+        )
 
 router = APIRouter()
 
@@ -82,8 +104,11 @@ async def get_queue(current_user: UserResponse = Depends(require_role("doctor"))
     """
     Returns the OPD queue for the doctor's hospital.
     """
+    if not current_user.hospital:
+        raise HTTPException(status_code=403, detail="Doctor is not assigned to any hospital")
+        
     db = get_database()
-    hospital_id = current_user.hospital  # Assuming 'hospital' field stores the ID/Name
+    hospital_id = current_user.hospital
     
     # query visits for in_queue
     visits = await db.visits.find({
@@ -136,27 +161,32 @@ async def add_to_queue(data: VisitCreate, current_user: UserResponse = Depends(r
     """
     Adds a patient to the OPD queue and assigns a risk tag using Groq.
     """
+    if not current_user.hospital:
+        raise HTTPException(status_code=403, detail="Doctor is not assigned to any hospital")
+        
     db = get_database()
     
     # 1. Fetch patient
-    patient = await db.patients.find_one({"_id": ObjectId(data.patient_id)})
+    patient = await db.patients.find_one({"_id": safe_object_id(data.patient_id)})
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
         
     risk_tag = "low"
     referred_by = None
     
-    # 2. If referral_id, pre-fill
+    # 2. If referral_id, pre-fill and verify scope
     if data.referral_id:
-        referral = await db.referrals.find_one({"_id": ObjectId(data.referral_id)})
-        if referral:
-            # We can use the referral's AI summary or set risk from it
-            # For simplicity, if it's a referral, it's at least 'watch' or 'urgent'
-            risk_tag = "watch"
-            # Get ASHA name
-            asha = await db.users.find_one({"_id": ObjectId(referral["from_worker_id"])})
-            if asha:
-                referred_by = asha["name"]
+        referral = await db.referrals.find_one({"_id": safe_object_id(data.referral_id)})
+        if not referral:
+            raise HTTPException(status_code=404, detail="Referral not found")
+        if referral.get("to_hospital_id") != current_user.hospital:
+            raise HTTPException(status_code=403, detail="Access denied: Referral is for a different hospital")
+            
+        risk_tag = "watch"
+        # Get ASHA name
+        asha = await db.users.find_one({"_id": safe_object_id(referral["from_worker_id"])})
+        if asha:
+            referred_by = asha["name"]
 
     # 3. Call Groq for initial risk assessment based on chief complaint
     groq_api_key = settings.groq_api_key
@@ -205,10 +235,13 @@ async def get_patient_record(patient_id: str, current_user: UserResponse = Depen
     Fetches patient record. Returns full history if consent exists, limited otherwise.
     Always returns allergies.
     """
+    if not current_user.hospital:
+        raise HTTPException(status_code=403, detail="Doctor is not assigned to any hospital")
+        
     db = get_database()
     
     # 1. Fetch patient
-    patient = await db.patients.find_one({"_id": ObjectId(patient_id)})
+    patient = await db.patients.find_one({"_id": safe_object_id(patient_id)})
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
         
@@ -276,7 +309,7 @@ async def get_patient_record(patient_id: str, current_user: UserResponse = Depen
             "asha_visit_history": asha_history
         }
     else:
-        # Check for active referral even without consent (Connection 1 requirement)
+        # Check for active referral even without consent
         active_referral = await db.referrals.find_one({
             "patient_id": patient_id,
             "to_hospital_id": current_user.hospital,
@@ -298,10 +331,26 @@ async def get_patient_summary(patient_id: str, current_user: UserResponse = Depe
     """
     Generates a 4-sentence AI clinical summary using Groq.
     """
+    if not current_user.hospital:
+        raise HTTPException(status_code=403, detail="Doctor is not assigned to any hospital")
+        
     db = get_database()
     
+    # Enforce Consent check!
+    consent = await db.consents.find_one({
+        "patient_id": patient_id,
+        "granted_to_id": str(current_user.id),
+        "expires_at": {"$gt": datetime.utcnow()},
+        "revoked": False
+    })
+    if not consent:
+        raise HTTPException(status_code=403, detail="Access denied: Patient consent is required to view summary")
+
     # Fetch data for context
-    patient = await db.patients.find_one({"_id": ObjectId(patient_id)})
+    patient = await db.patients.find_one({"_id": safe_object_id(patient_id)})
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+        
     visits = await db.visits.find({"patient_id": patient_id}).sort("date", -1).limit(10).to_list(10)
     labs = await db.lab_orders.find({"patient_id": patient_id}).sort("ordered_date", -1).limit(5).to_list(5)
     
@@ -353,8 +402,22 @@ async def start_visit(data: VisitCreate, current_user: UserResponse = Depends(re
     """
     Starts an active consultation.
     """
+    if not current_user.hospital:
+        raise HTTPException(status_code=403, detail="Doctor is not assigned to any hospital")
+        
     db = get_database()
     
+    # Verify patient exists
+    patient = await db.patients.find_one({"_id": safe_object_id(data.patient_id)})
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+        
+    # Verify referral scope if provided
+    if data.referral_id:
+        referral = await db.referrals.find_one({"_id": safe_object_id(data.referral_id)})
+        if not referral or referral.get("to_hospital_id") != current_user.hospital or referral.get("patient_id") != data.patient_id:
+            raise HTTPException(status_code=403, detail="Access denied: Invalid referral association")
+            
     visit_doc = {
         "patient_id": data.patient_id,
         "hospital_id": current_user.hospital,
@@ -372,7 +435,7 @@ async def start_visit(data: VisitCreate, current_user: UserResponse = Depends(re
     
     if data.referral_id:
         await db.referrals.update_one(
-            {"_id": ObjectId(data.referral_id)},
+            {"_id": safe_object_id(data.referral_id)},
             {"$set": {
                 "status": "accepted",
                 "accepted_at": datetime.utcnow(),
@@ -389,7 +452,17 @@ async def update_visit(visit_id: str, data: Dict[str, Any], current_user: UserRe
     """
     Updates visit data (diagnosis, notes, follow-up).
     """
+    if not current_user.hospital:
+        raise HTTPException(status_code=403, detail="Doctor is not assigned to any hospital")
+        
     db = get_database()
+    
+    visit = await db.visits.find_one({"_id": safe_object_id(visit_id)})
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visit not found")
+    if visit.get("hospital_id") != current_user.hospital:
+        raise HTTPException(status_code=403, detail="Access denied to this visit")
+        
     allowed_fields = ["diagnosis", "notes", "follow_up_date", "chief_complaint", "examination_findings"]
     update_data = {k: v for k, v in data.items() if k in allowed_fields}
     
@@ -397,7 +470,7 @@ async def update_visit(visit_id: str, data: Dict[str, Any], current_user: UserRe
         update_data["follow_up_date"] = datetime.fromisoformat(update_data["follow_up_date"].replace("Z", "+00:00"))
         
     await db.visits.update_one(
-        {"_id": ObjectId(visit_id)},
+        {"_id": safe_object_id(visit_id), "hospital_id": current_user.hospital},
         {"$set": update_data}
     )
     return {"status": "updated"}
@@ -407,27 +480,25 @@ async def complete_visit(visit_id: str, current_user: UserResponse = Depends(req
     """
     Completes the visit, removes from queue, and updates referral status.
     """
+    if not current_user.hospital:
+        raise HTTPException(status_code=403, detail="Doctor is not assigned to any hospital")
+        
     db = get_database()
     
-    visit = await db.visits.find_one({"_id": ObjectId(visit_id)})
+    visit = await db.visits.find_one({"_id": safe_object_id(visit_id), "hospital_id": current_user.hospital})
     if not visit:
-        raise HTTPException(status_code=404, detail="Visit not found")
+        raise HTTPException(status_code=404, detail="Visit not found or access denied")
         
     # Update visit status
     await db.visits.update_one(
-        {"_id": ObjectId(visit_id)},
+        {"_id": safe_object_id(visit_id), "hospital_id": current_user.hospital},
         {"$set": {"status": "completed"}}
     )
-    
-    # Remove from queue (if there's a queue entry with this ID or patient/hospital/in_queue)
-    # Actually, in our logic, 'in_queue' is a status of a visit. 
-    # But wait, completing a 'visit' that was 'active' shouldn't remove a 'separate' queue entry.
-    # Typically, the visit document itself transitions from in_queue -> active -> completed.
     
     # If a referral was linked, update it to 'seen' with outcomes
     if visit.get("referral_id"):
         await db.referrals.update_one(
-            {"_id": ObjectId(visit["referral_id"])},
+            {"_id": safe_object_id(visit["referral_id"])},
             {"$set": {
                 "status": "seen",
                 "seen_at": datetime.utcnow(),
@@ -498,7 +569,36 @@ async def check_interaction(data: PrescriptionInteractionRequest, current_user: 
             model="llama-3.3-70b-versatile",
             response_format={"type": "json_object"}
         )
-        return json.loads(chat_completion.choices[0].message.content)
+        res_data = json.loads(chat_completion.choices[0].message.content)
+        
+        # Safety Hardening: validate types and limits
+        has_interaction = res_data.get("has_interaction", False)
+        if not isinstance(has_interaction, bool):
+            has_interaction = str(has_interaction).lower() in ["true", "1", "yes"]
+            
+        has_allergy_risk = res_data.get("has_allergy_risk", False)
+        if not isinstance(has_allergy_risk, bool):
+            has_allergy_risk = str(has_allergy_risk).lower() in ["true", "1", "yes"]
+            
+        severity = str(res_data.get("severity", "none")).lower().strip()
+        if severity not in ["none", "mild", "moderate", "severe"]:
+            severity = "none"
+            
+        warning = res_data.get("warning")
+        if warning is not None:
+            warning = str(warning)[:200]
+            
+        rec = res_data.get("recommendation")
+        if rec is not None:
+            rec = str(rec)[:500]
+            
+        return {
+            "has_interaction": has_interaction,
+            "has_allergy_risk": has_allergy_risk,
+            "severity": severity,
+            "warning": warning,
+            "recommendation": rec
+        }
     except Exception as e:
         print(f"Interaction Check Error: {e}")
         return {"has_interaction": False, "has_allergy_risk": False, "severity": "none"}
@@ -508,15 +608,23 @@ async def save_prescription(data: PrescriptionSaveRequest, current_user: UserRes
     """
     Saves prescription and updates visit document.
     """
+    if not current_user.hospital:
+        raise HTTPException(status_code=403, detail="Doctor is not assigned to any hospital")
+        
     db = get_database()
     
-    # 1. Update visit
+    # Scope check on visit
+    visit = await db.visits.find_one({"_id": safe_object_id(data.visit_id), "hospital_id": current_user.hospital})
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visit not found or access denied")
+    if visit.get("patient_id") != data.patient_id:
+        raise HTTPException(status_code=400, detail="Invalid patient association for this visit")
+        
+    # Update visit
     await db.visits.update_one(
-        {"_id": ObjectId(data.visit_id)},
+        {"_id": safe_object_id(data.visit_id), "hospital_id": current_user.hospital},
         {"$set": {"prescriptions": [m.dict() for m in data.medicines]}}
     )
-    
-    # TODO: Send FCM notification to patient
     
     return {"status": "success", "message": "Prescription saved and patient notified."}
 
@@ -531,18 +639,57 @@ async def process_voice_note(
     """
     Transcribes audio and extracts structured clinical data.
     """
-    # 1. Save temporary file
+    if not current_user.hospital:
+        raise HTTPException(status_code=403, detail="Doctor is not assigned to any hospital")
+        
+    db = get_database()
+    
+    # Verify visit exists and belongs to doctor's hospital
+    visit = await db.visits.find_one({"_id": safe_object_id(visit_id), "hospital_id": current_user.hospital})
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visit not found or access denied")
+
+    # Rate Limiting: 10 requests per minute per user
+    rate_limit_key = f"voice_note:{current_user.id}"
+    if not check_rate_limit(rate_limit_key, limit=10, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests. Please try again later.")
+        
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ['.wav', '.mp3', '.m4a', '.ogg', '.webm', '.bin']:
+        raise HTTPException(status_code=400, detail="Unsupported audio format")
+        
+    # MIME validation
+    allowed_content_types = [
+        "audio/wav", "audio/x-wav", "audio/mpeg", "audio/mp3", 
+        "audio/m4a", "audio/x-m4a", "audio/ogg", "audio/webm", 
+        "video/webm", "application/octet-stream"
+    ]
+    if file.content_type not in allowed_content_types:
+        raise HTTPException(status_code=400, detail="Invalid audio MIME type")
+
+    # Generate secure random temp filename
     temp_dir = tempfile.gettempdir()
-    temp_path = os.path.join(temp_dir, f"clinician_voice_{visit_id}_{file.filename}")
+    temp_filename = f"clinician_voice_{uuid.uuid4().hex}{ext}"
+    temp_path = os.path.join(temp_dir, temp_filename)
     
     try:
+        # Enforce max upload size: 10MB
+        MAX_FILE_SIZE = 10 * 1024 * 1024
+        file_size = 0
         with open(temp_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-            
-        # 2. Transcribe using Faster Whisper
+            while True:
+                chunk = await file.read(1024 * 1024)  # 1MB chunk
+                if not chunk:
+                    break
+                file_size += len(chunk)
+                if file_size > MAX_FILE_SIZE:
+                    raise HTTPException(status_code=413, detail="File too large. Max allowed size is 10MB.")
+                buffer.write(chunk)
+                
+        # Transcribe
         transcription = await transcription_service.transcribe(temp_path)
         
-        # 3. Structuring via Groq
+        # Structure via Groq
         groq_api_key = settings.groq_api_key
         structured_data = {}
         if groq_api_key:
@@ -570,16 +717,31 @@ async def process_voice_note(
                 response_format={"type": "json_object"}
             )
             structured_data = json.loads(chat_completion.choices[0].message.content)
-        else:
-            structured_data = {"raw_transcription": transcription}
             
-        # Cleanup
-        os.remove(temp_path)
-        return structured_data
-        
+            # LLM Output Hardening
+            validated_data = {
+                "chief_complaint": str(structured_data.get("chief_complaint", "Not recorded"))[:1000],
+                "examination_findings": str(structured_data.get("examination_findings", "Not recorded"))[:1000],
+                "diagnosis": [str(d)[:100] for d in structured_data.get("diagnosis", []) if d][:10],
+                "plan": str(structured_data.get("plan", ""))[:2000],
+                "follow_up": str(structured_data.get("follow_up", ""))[:500],
+                "medicines_mentioned": [str(m)[:100] for m in structured_data.get("medicines_mentioned", []) if m][:20],
+                "raw_transcription": str(structured_data.get("raw_transcription", transcription))[:5000]
+            }
+            return validated_data
+        else:
+            return {"raw_transcription": transcription[:5000]}
+            
+    except HTTPException:
+        raise
     except Exception as e:
-        if os.path.exists(temp_path): os.remove(temp_path)
         raise HTTPException(status_code=500, detail=f"Voice processing failed: {str(e)}")
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
 
 # --- LAB & REFERRAL ENDPOINTS ---
 
@@ -588,8 +750,18 @@ async def create_lab_orders(data: LabOrderCreate, current_user: UserResponse = D
     """
     Creates multiple lab orders.
     """
+    if not current_user.hospital:
+        raise HTTPException(status_code=403, detail="Doctor is not assigned to any hospital")
+        
     db = get_database()
     
+    # Scope check on visit
+    visit = await db.visits.find_one({"_id": safe_object_id(data.visit_id), "hospital_id": current_user.hospital})
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visit not found or access denied")
+    if visit.get("patient_id") != data.patient_id:
+        raise HTTPException(status_code=400, detail="Invalid patient association for this visit")
+        
     orders = []
     for test in data.tests:
         order = {
@@ -608,7 +780,6 @@ async def create_lab_orders(data: LabOrderCreate, current_user: UserResponse = D
     if orders:
         await db.lab_orders.insert_many(orders)
         
-    # TODO: Send FCM notification
     return {"status": "success", "count": len(orders)}
 
 @router.post("/referrals")
@@ -616,8 +787,23 @@ async def create_referral(data: ReferralCreate, current_user: UserResponse = Dep
     """
     Creates a formal referral to another hospital.
     """
+    if not current_user.hospital:
+        raise HTTPException(status_code=403, detail="Doctor is not assigned to any hospital")
+        
     db = get_database()
     
+    # Scope check on visit
+    visit = await db.visits.find_one({"_id": safe_object_id(data.visit_id), "hospital_id": current_user.hospital})
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visit not found or access denied")
+    if visit.get("patient_id") != data.patient_id:
+        raise HTTPException(status_code=400, detail="Invalid patient association for this visit")
+        
+    # Verify target hospital exists
+    target_hospital = await db.hospitals.find_one({"name": data.to_hospital_id})
+    if not target_hospital:
+        raise HTTPException(status_code=400, detail="Target hospital not found in database")
+        
     referral_doc = {
         "visit_id": data.visit_id,
         "patient_id": data.patient_id,
@@ -627,7 +813,7 @@ async def create_referral(data: ReferralCreate, current_user: UserResponse = Dep
         "urgency": data.urgency,
         "ai_summary": data.summary,
         "status": "pending",
-        "from_worker_id": str(current_user.id), # Referral from doctor
+        "from_worker_id": str(current_user.id),
         "created_at": datetime.utcnow()
     }
     
@@ -636,14 +822,14 @@ async def create_referral(data: ReferralCreate, current_user: UserResponse = Dep
     
     # Update current visit with referral info
     await db.visits.update_one(
-        {"_id": ObjectId(data.visit_id)},
+        {"_id": safe_object_id(data.visit_id), "hospital_id": current_user.hospital},
         {"$set": {"out_referral_id": referral_id}}
     )
     
     # Bridge to the target hospital's OPD queue
     await db.visits.insert_one({
         "patient_id": data.patient_id,
-        "hospital_id": data.to_hospital_id,  # Target hospital name
+        "hospital_id": data.to_hospital_id,
         "date": datetime.utcnow(),
         "created_at": datetime.utcnow(),
         "chief_complaint": f"Clinician Referral ({data.to_speciality}): {data.reason[:100]}...",
@@ -665,8 +851,22 @@ async def get_differential(symptoms: str, patient_id: str, current_user: UserRes
     """
     Suggests top 3 likely diagnoses based on symptoms and patient history.
     """
+    if not current_user.hospital:
+        raise HTTPException(status_code=403, detail="Doctor is not assigned to any hospital")
+        
     db = get_database()
-    patient = await db.patients.find_one({"_id": ObjectId(patient_id)})
+    
+    # Enforce Consent check!
+    consent = await db.consents.find_one({
+        "patient_id": patient_id,
+        "granted_to_id": str(current_user.id),
+        "expires_at": {"$gt": datetime.utcnow()},
+        "revoked": False
+    })
+    if not consent:
+        raise HTTPException(status_code=403, detail="Access denied: Patient consent is required to get differential diagnoses")
+
+    patient = await db.patients.find_one({"_id": safe_object_id(patient_id)})
     if not patient: raise HTTPException(status_code=404, detail="Patient not found")
     
     # Age calc
@@ -705,7 +905,26 @@ async def get_differential(symptoms: str, patient_id: str, current_user: UserRes
             model="llama-3.3-70b-versatile",
             response_format={"type": "json_object"}
         )
-        return json.loads(chat_completion.choices[0].message.content)
+        res_data = json.loads(chat_completion.choices[0].message.content)
+        
+        # Hardening LLM outputs
+        diagnoses = []
+        for item in res_data.get("diagnoses", []):
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name", "Unknown Diagnosis"))[:150]
+            confidence = str(item.get("confidence", "Low")).strip()
+            if confidence not in ["High", "Medium", "Low"]:
+                confidence = "Low"
+            reasoning = str(item.get("reasoning", ""))[:300]
+            suggested_tests = [str(t)[:100] for t in item.get("suggested_tests", []) if t][:10]
+            diagnoses.append({
+                "name": name,
+                "confidence": confidence,
+                "reasoning": reasoning,
+                "suggested_tests": suggested_tests
+            })
+        return {"diagnoses": diagnoses}
     except Exception as e:
         print(f"Differential Error: {e}")
         return {"diagnoses": []}

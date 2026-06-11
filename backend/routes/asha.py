@@ -2,6 +2,9 @@ import os
 import json
 import shutil
 import tempfile
+import time
+import uuid
+from collections import defaultdict
 from fastapi import APIRouter, Depends, HTTPException, Request, status, File, UploadFile
 from fastapi.responses import JSONResponse
 from typing import List, Dict, Any
@@ -18,6 +21,16 @@ from bson import ObjectId
 from groq import AsyncGroq
 from config import settings
 
+rate_limit_store = defaultdict(list)
+
+def check_rate_limit(key: str, limit: int, window: int) -> bool:
+    now = time.time()
+    rate_limit_store[key] = [t for t in rate_limit_store[key] if now - t < window]
+    if len(rate_limit_store[key]) >= limit:
+        return False
+    rate_limit_store[key].append(now)
+    return True
+
 def safe_object_id(id_str: str):
     try:
         return ObjectId(id_str)
@@ -33,7 +46,7 @@ router = APIRouter()
 async def get_households(current_user: UserResponse = Depends(get_current_user)):
     db = get_database()
     
-    households_cursor = db.households.find()
+    households_cursor = db.households.find({"created_by": current_user.id})
     households = await households_cursor.to_list(100)
     
     def get_risk_weight(h):
@@ -70,9 +83,12 @@ async def get_household(household_id: str, current_user: UserResponse = Depends(
     if not h:
         raise HTTPException(status_code=404, detail="Household not found")
         
+    if h.get("created_by") != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied to this household")
+        
     h["id"] = str(h.pop("_id"))
     
-    visits_cursor = db.asha_visits.find({"household_id": household_id}).sort("created_at", -1)
+    visits_cursor = db.asha_visits.find({"household_id": household_id, "asha_id": current_user.id}).sort("created_at", -1)
     visits = await visits_cursor.to_list(length=10)
     for v in visits:
         v["id"] = str(v.pop("_id"))
@@ -83,6 +99,21 @@ async def get_household(household_id: str, current_user: UserResponse = Depends(
 @router.post("/visits")
 async def submit_visit(visit: VisitCreate, current_user: UserResponse = Depends(get_current_user)):
     db = get_database()
+    
+    # Verify household ownership
+    hh = await db.households.find_one({"_id": safe_object_id(visit.household_id)})
+    if not hh or hh.get("created_by") != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied to this household")
+        
+    # Verify patient is member of the household
+    member_found = False
+    for member in hh.get("members", []):
+        if member.get("patient_id") == visit.member_id:
+            member_found = True
+            break
+    if not member_found:
+        raise HTTPException(status_code=403, detail="Access denied: Patient is not a member of this household")
+
     visit_dict = visit.dict()
     visit_dict["asha_id"] = current_user.id
     visit_dict["created_at"] = datetime.utcnow()
@@ -120,7 +151,6 @@ async def submit_visit(visit: VisitCreate, current_user: UserResponse = Depends(
         await db.referrals.insert_one(ref_dict)
         
         # BRIDGE TO CLINICIAN QUEUE
-        # If hospital is AUTO_ASSIGNED, find the first hospital in the DB
         target_hospital = ref_dict["to_hospital_id"]
         if target_hospital == "AUTO_ASSIGNED":
             first_hospital = await db.hospitals.find_one({})
@@ -192,11 +222,23 @@ async def classify_risk(req: RiskClassifyRequest, current_user: UserResponse = D
         result_str = completion.choices[0].message.content.strip()
         result_json = json.loads(result_str)
         
+        # LLM Safety Hardening: validate types and limit strings
+        risk_level_str = str(result_json.get("risk_level", "WATCH")).upper().strip()
+        if risk_level_str not in ["LOW", "WATCH", "URGENT"]:
+            risk_level_str = "WATCH"
+            
+        refer_to_doctor = result_json.get("refer_to_doctor", False)
+        if not isinstance(refer_to_doctor, bool):
+            refer_to_doctor = str(refer_to_doctor).lower() in ["true", "1", "yes"]
+            
+        reasoning = str(result_json.get("reasoning", "AI classified risk based on vital signs."))[:500]
+        rec = str(result_json.get("recommendation", "Monitor closely."))[:500]
+        
         return RiskClassifyResponse(
-            risk_level=result_json.get("risk_level", "WATCH"),
-            reasoning=result_json.get("reasoning", "AI classified risk based on vital signs."),
-            recommendation=result_json.get("recommendation", "Monitor closely."),
-            refer_to_doctor=result_json.get("refer_to_doctor", False)
+            risk_level=risk_level_str,
+            reasoning=reasoning,
+            recommendation=rec,
+            refer_to_doctor=refer_to_doctor
         )
     except Exception as e:
         import traceback
@@ -207,6 +249,33 @@ async def classify_risk(req: RiskClassifyRequest, current_user: UserResponse = D
 @router.post("/referrals")
 async def send_referral(ref: ReferralCreate, current_user: UserResponse = Depends(get_current_user)):
     db = get_database()
+    
+    # Verify household ownership
+    hh = await db.households.find_one({"_id": safe_object_id(ref.household_id)})
+    if not hh or hh.get("created_by") != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied to this household")
+        
+    # Verify patient ownership/scope
+    if ref.patient_id and ref.patient_id != "unknown" and len(ref.patient_id) == 24:
+        member_found = False
+        for m in hh.get("members", []):
+            if m.get("patient_id") == ref.patient_id:
+                member_found = True
+                break
+        if not member_found:
+            raise HTTPException(status_code=403, detail="Access denied: Patient is not a member of this household")
+
+    # Verify visit ownership/scope
+    if ref.visit_id and ref.visit_id != "unknown" and len(ref.visit_id) == 24:
+        visit_check = await db.asha_visits.find_one({"_id": safe_object_id(ref.visit_id)})
+        if not visit_check or visit_check.get("asha_id") != current_user.id or visit_check.get("household_id") != ref.household_id:
+            raise HTTPException(status_code=403, detail="Access denied to this visit")
+            
+    # Verify target hospital exists
+    hospital_check = await db.hospitals.find_one({"$or": [{"name": ref.to_hospital_id}, {"_id": safe_object_id(ref.to_hospital_id)}]})
+    if not hospital_check:
+        raise HTTPException(status_code=400, detail="Target hospital not found in database")
+
     ref_dict = ref.dict()
     ref_dict["asha_id"] = current_user.id
     ref_dict["from_worker_id"] = current_user.id
@@ -222,13 +291,11 @@ async def send_referral(ref: ReferralCreate, current_user: UserResponse = Depend
     try:
         if not ref.patient_id or len(ref.patient_id) != 24:
             # Create a "Stub" patient if ASHA worker refers someone not in DB
-            # Fetch patient name from household if available
             patient_name = "New Referral Patient"
             if ref.household_id:
                 household = await db.households.find_one({"_id": ObjectId(ref.household_id)})
                 if household:
-                    # Try to find name in members
-                    patient_name = household["family_name"] # Fallback
+                    patient_name = household.get("family_name", "New Referral Patient")
 
             stub_patient = {
                 "name": patient_name,
@@ -244,7 +311,6 @@ async def send_referral(ref: ReferralCreate, current_user: UserResponse = Depend
         print(f"Patient Stub Creation Error: {e}")
 
     # BRIDGE TO CLINICIAN QUEUE
-    # Create an active queue entry for the doctor
     await db.visits.insert_one({
         "patient_id": ref.patient_id,
         "hospital_id": ref.to_hospital_id,
@@ -362,37 +428,62 @@ async def get_nearby_facilities(lat: float = None, lng: float = None, radius_km:
 @router.post("/transcribe")
 async def transcribe_audio(
     file: UploadFile = File(...),
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Endpoint for ASHA workers to upload audio recordings of field visits.
     Uses Groq AI to transcribe voice notes.
     """
-    if not file.filename.endswith(('.wav', '.mp3', '.m4a', '.ogg', '.webm', '.bin')):
+    # Rate Limiting: 10 requests per minute per user
+    rate_limit_key = f"transcribe:{current_user.id}"
+    if not check_rate_limit(rate_limit_key, limit=10, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests. Please try again later.")
+        
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ['.wav', '.mp3', '.m4a', '.ogg', '.webm', '.bin']:
         raise HTTPException(status_code=400, detail="Unsupported audio format")
+        
+    # MIME validation
+    allowed_content_types = [
+        "audio/wav", "audio/x-wav", "audio/mpeg", "audio/mp3", 
+        "audio/m4a", "audio/x-m4a", "audio/ogg", "audio/webm", 
+        "video/webm", "application/octet-stream"
+    ]
+    if file.content_type not in allowed_content_types:
+        raise HTTPException(status_code=400, detail="Invalid audio MIME type")
 
+    # Generate secure random temp filename
     temp_dir = tempfile.gettempdir()
-    # Unique temp name
-    temp_path = os.path.join(temp_dir, f"sync_voice_{os.urandom(4).hex()}_{file.filename}")
-    
-    print(f"DEBUG: Receiving audio for reprocessing: {file.filename}")
+    temp_filename = f"sync_voice_{uuid.uuid4().hex}{ext}"
+    temp_path = os.path.join(temp_dir, temp_filename)
     
     try:
+        # Enforce max upload size: 10MB
+        MAX_FILE_SIZE = 10 * 1024 * 1024
+        file_size = 0
         with open(temp_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        
+            while True:
+                chunk = await file.read(1024 * 1024)  # 1MB chunk
+                if not chunk:
+                    break
+                file_size += len(chunk)
+                if file_size > MAX_FILE_SIZE:
+                    raise HTTPException(status_code=413, detail="File too large. Max allowed size is 10MB.")
+                buffer.write(chunk)
+                
         # Process transcription
         text = await transcription_service.transcribe(temp_path)
-        
-        # Cleanup
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-            
         return {"transcript": text}
+    except HTTPException:
+        raise
     except Exception as e:
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-        print(f"Transcription Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
 
 @router.post("/sync")
 async def sync_data(
@@ -403,30 +494,56 @@ async def sync_data(
     Batch endpoint to sync offline data.
     Receives lists of households and visits.
     """
-    # Use real user ID from token
     asha_id = str(user.id)
     
     db = get_database()
     if db is None:
-        print("DEBUG SYNC: Database connection is unavailable!")
         return JSONResponse(
             status_code=503,
             content={"error": "Database unavailable. Check MongoDB connection."}
         )
+        
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid payload structure")
+        
+    households = payload.get("households", [])
+    visits = payload.get("visits", [])
+    
+    if not isinstance(households, list) or not isinstance(visits, list):
+        raise HTTPException(status_code=400, detail="Invalid payload structure")
     
     results = {"households": 0, "visits": 0}
     
     # Sync Households
-    for hh in payload.get('households', []):
+    for hh in households:
+        if not isinstance(hh, dict):
+            continue
         hh_id = hh.get('id', '')
-        object_id = ObjectId(hh_id) if len(hh_id) == 24 else ObjectId()
         
+        if hh_id and len(hh_id) == 24:
+            try:
+                object_id = ObjectId(hh_id)
+            except Exception:
+                raise HTTPException(status_code=400, detail=f"Invalid household ID format: {hh_id}")
+                
+            # Ownership check on existing household
+            existing_hh = await db.households.find_one({"_id": object_id})
+            if existing_hh:
+                if existing_hh.get("created_by") != asha_id:
+                    raise HTTPException(
+                        status_code=403,
+                        detail=f"Access denied: Household {hh_id} does not belong to your scope"
+                    )
+        else:
+            object_id = ObjectId()
+            
         await db.households.update_one(
             {"_id": object_id},
             {"$set": {
                 "family_name": hh.get('name', hh.get('family_name')),
                 "name": hh.get('name'),
                 "asha_id": asha_id,
+                "created_by": asha_id,
                 "risk_level": hh.get('risk_level', 'green'),
                 "last_visit_date": hh.get('last_visit_date'),
                 "village": hh.get('village', ''),
@@ -438,7 +555,11 @@ async def sync_data(
 
         # Sync members' visits
         for member in hh.get('members', []):
+            if not isinstance(member, dict):
+                continue
             for visit in member.get('visits', []):
+                if not isinstance(visit, dict):
+                    continue
                 visit_doc = {
                     "household_id": str(object_id),
                     "asha_id": asha_id,
@@ -456,7 +577,27 @@ async def sync_data(
                 results["visits"] += 1
 
     # Also sync top-level visits array (if sent separately)
-    for v in payload.get('visits', []):
+    for v in visits:
+        if not isinstance(v, dict):
+            continue
+            
+        v_hh_id = v.get("household_id")
+        if not v_hh_id:
+            raise HTTPException(status_code=400, detail="Household ID is required for synced visits")
+            
+        try:
+            v_hh_obj_id = ObjectId(v_hh_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid household ID in visit")
+            
+        # Scope check: referenced household must belong to this ASHA worker
+        hh_check = await db.households.find_one({"_id": v_hh_obj_id})
+        if not hh_check or hh_check.get("created_by") != asha_id:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Access denied: Household {v_hh_id} for visit does not belong to your scope"
+            )
+            
         v["asha_id"] = asha_id
         if "created_at" not in v:
             v["created_at"] = datetime.utcnow()
