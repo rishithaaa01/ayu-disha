@@ -5,9 +5,12 @@ interface User {
   name: string;
   role: string;
   mobile: string;
+  email?: string;
   language: string;
   hospital?: string;
-  speciality?: string;
+  village?: string;
+  district?: string;
+  is_profile_complete?: boolean;
 }
 
 interface AuthState {
@@ -17,6 +20,7 @@ interface AuthState {
   login: (user: User, token: string) => void;
   logout: () => void;
   hydrate: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -34,8 +38,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: (user, token) => {
     localStorage.setItem('user', JSON.stringify(user));
     localStorage.setItem('token', token);
-    // Also set cookie for middleware
-    document.cookie = `auth_token=${token}; path=/; max-age=${7 * 24 * 60 * 60}`;
+    document.cookie = `auth_token=${token}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
     set({ user, token, isAuthenticated: true });
   },
 
@@ -44,5 +47,17 @@ export const useAuthStore = create<AuthState>((set) => ({
     localStorage.removeItem('token');
     document.cookie = 'auth_token=; path=/; max-age=0';
     set({ user: null, token: null, isAuthenticated: false });
+  },
+
+  refreshUser: async () => {
+    try {
+      const { default: api } = await import('@/lib/api');
+      const res = await api.get('/auth/me');
+      const freshUser = res.data;
+      localStorage.setItem('user', JSON.stringify(freshUser));
+      set({ user: freshUser });
+    } catch (e) {
+      console.warn('Failed to refresh user', e);
+    }
   },
 }));
