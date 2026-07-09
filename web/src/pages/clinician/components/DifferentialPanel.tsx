@@ -9,7 +9,7 @@ interface DifferentialPanelProps {
 
 export default function DifferentialPanel({ diagnoses, isLoading, symptoms }: DifferentialPanelProps) {
   return (
-    <div className="flex flex-col h-full bg-[#FAFAFA] p-8">
+    <div className="p-8 bg-[#FAFAFA]">
       <div className="mb-6">
         <div className="flex items-center gap-2 text-[#1B6CA8] mb-2">
           <Sparkles size={18} fill="#1B6CA8" />

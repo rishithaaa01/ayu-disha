@@ -53,8 +53,7 @@ export default function LabOrderPanel({ patient, visitId }: LabOrderPanelProps) 
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#FAFAFA] p-8">
-      <div className="mb-8">
+    <div className="p-8 bg-[#FAFAFA]">      <div className="mb-8">
         <div className="flex items-center gap-2 text-[#1B6CA8] mb-2">
           <FlaskConical size={18} />
           <h3 className="font-bold text-lg uppercase tracking-wider font-mukta">Laboratory Investigations</h3>
