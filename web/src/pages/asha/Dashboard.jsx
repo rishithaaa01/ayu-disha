@@ -767,9 +767,7 @@ export default function AshaDashboard() {
                               <button
                                 onClick={() => {
                                   setVisitHhId(hh.id);
-                                  if (hh.members && hh.members.length > 0) {
-                                    setVisitMemberName(hh.members[0].name);
-                                  }
+                                  setVisitMemberName(''); // let user pick from dropdown
                                   setShowVisitModal(true);
                                 }}
                                 className="text-[#1B6CA8] font-bold text-xs hover:underline flex items-center gap-1 ml-auto"
@@ -993,10 +991,7 @@ export default function AshaDashboard() {
                     value={visitHhId}
                     onChange={(e) => {
                       setVisitHhId(e.target.value);
-                      const selected = households.find(h => h.id === e.target.value);
-                      if (selected && selected.members && selected.members.length > 0) {
-                        setVisitMemberName(selected.members[0].name);
-                      }
+                      setVisitMemberName(''); // clear member so user picks from dropdown
                     }}
                     className="w-full p-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-green-500 text-sm cursor-pointer"
                     required
@@ -1009,14 +1004,21 @@ export default function AshaDashboard() {
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Patient / Member</label>
-                  <input
-                    type="text"
+                  <select
                     value={visitMemberName}
                     onChange={(e) => setVisitMemberName(e.target.value)}
-                    placeholder="e.g. Ramesh Kumar"
-                    className="w-full p-3 border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                    className="w-full p-3 bg-white border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-green-500 text-sm cursor-pointer"
                     required
-                  />
+                    disabled={!visitHhId}
+                  >
+                    <option value="">{visitHhId ? '-- Select member --' : '-- Select household first --'}</option>
+                    {visitHhId && households?.find(h => h.id === visitHhId)?.members?.map((m, i) => (
+                      <option key={i} value={m.name}>
+                        {m.name}{m.age ? ` (${m.age}y` : ''}{m.gender ? `, ${m.gender}` : ''}{m.age ? ')' : ''}
+                        {m.details ? ` — ${m.details}` : ''}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
