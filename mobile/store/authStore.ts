@@ -23,6 +23,7 @@ interface AuthState {
   login: (user: User, token: string) => Promise<void>;
   logout: () => Promise<void>;
   restoreSession: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -43,7 +44,16 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user: null, token: null, isAuthenticated: false });
   },
   
-  restoreSession: async () => {
+  refreshUser: async () => {
+    try {
+      const response = await api.get('/auth/me');
+      const freshUser = response.data;
+      await SecureStore.setItemAsync('user', JSON.stringify(freshUser));
+      set({ user: freshUser });
+    } catch (e) {
+      console.warn('Failed to refresh user', e);
+    }
+  },
     try {
       const token = await SecureStore.getItemAsync('token');
       if (token) {

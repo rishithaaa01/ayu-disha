@@ -19,6 +19,7 @@ import { useAuthStore } from '../../store/authStore';
 export default function DoctorDashboard() {
   const { queue, setQueue, isRefreshing, setRefreshing, setActivePatient } = useClinicianStore();
   const doctor = useAuthStore((state) => state.user);
+  const refreshUser = useAuthStore((state) => state.refreshUser);
 
   const fetchQueue = useCallback(async () => {
     setRefreshing(true);
@@ -33,9 +34,8 @@ export default function DoctorDashboard() {
   }, []);
 
   useEffect(() => {
+    refreshUser(); // Always get fresh name/hospital on screen mount
     fetchQueue();
-    
-    // Set up 30-second polling
     const interval = setInterval(fetchQueue, 30000);
     return () => clearInterval(interval);
   }, []);

@@ -1,22 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import patientApi from '../../services/patientApi';
+import api from '../../services/api';
 import ConsentCard from '../../components/ConsentCard';
 import LoadingSkeleton from '../../components/LoadingSkeleton';
 
 export default function ConsentsScreen() {
   const [consents, setConsents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
+  const [doctors, setDoctors] = useState<any[]>([]);
+  const [doctorsLoading, setDoctorsLoading] = useState(false);
+
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
-  const [newConsent, setNewConsent] = useState({
-    granted_to_id: '',
-    granted_to_name: '',
-    data_scope: 'full',
-    expires_days: 30
-  });
+  const [selectedDoctor, setSelectedDoctor] = useState<any>(null);
+  const [dataScope, setDataScope] = useState('full');
+  const [expiresDays, setExpiresDays] = useState(30);
 
   useEffect(() => {
     loadConsents();
@@ -33,24 +33,47 @@ export default function ConsentsScreen() {
     }
   };
 
+  const loadDoctors = async () => {
+    setDoctorsLoading(true);
+    try {
+      const res = await api.get('/auth/doctors');
+      setDoctors(res.data || []);
+    } catch (e) {
+      console.warn('Failed to load doctors', e);
+    } finally {
+      setDoctorsLoading(false);
+    }
+  };
+
+  const openModal = () => {
+    setModalVisible(true);
+    setSelectedDoctor(null);
+    loadDoctors();
+  };
+
   const handleRevoke = async (id: string) => {
     try {
       await patientApi.revokeConsent(id);
       loadConsents();
     } catch (e) {
-      alert("Failed to revoke consent");
+      alert('Failed to revoke consent');
     }
   };
 
   const handleGrant = async () => {
-    if (!newConsent.granted_to_name) return alert('Doctor name required');
+    if (!selectedDoctor) return alert('Please select a doctor');
     try {
-      await patientApi.grantConsent(newConsent);
+      await patientApi.grantConsent({
+        granted_to_id:   selectedDoctor.id,
+        granted_to_name: selectedDoctor.name,
+        data_scope:      dataScope,
+        expires_days:    expiresDays,
+      });
       setModalVisible(false);
-      setNewConsent({...newConsent, granted_to_name: ''});
+      setSelectedDoctor(null);
       loadConsents();
     } catch (e) {
-      alert("Failed to grant consent");
+      alert('Failed to grant consent');
     }
   };
 
@@ -86,10 +109,7 @@ export default function ConsentsScreen() {
       )}
 
       {/* FAB */}
-      <TouchableOpacity 
-        style={styles.fab}
-        onPress={() => setModalVisible(true)}
-      >
+      <TouchableOpacity style={styles.fab} onPress={openModal}>
         <Ionicons name="add" size={24} color="#FFF" />
         <Text style={styles.fabText}>Grant Access</Text>
       </TouchableOpacity>
@@ -99,57 +119,79 @@ export default function ConsentsScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Grant New Access</Text>
+              <Text style={styles.modalTitle}>Grant Doctor Access</Text>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
                 <Ionicons name="close" size={24} color="#333" />
               </TouchableOpacity>
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Doctor/Hospital Name</Text>
-              <TextInput 
-                style={styles.input} 
-                placeholder="E.g. Dr. Ramesh Kumar"
-                value={newConsent.granted_to_name}
-                onChangeText={(t) => setNewConsent({...newConsent, granted_to_name: t})}
-              />
-            </View>
+            {/* Doctor List */}
+            <Text style={styles.inputLabel}>Select Doctor</Text>
+            {doctorsLoading ? (
+              <ActivityIndicator size="small" color="#1B6CA8" style={{ marginVertical: 16 }} />
+            ) : doctors.length === 0 ? (
+              <Text style={styles.emptyDoctors}>No doctors found. Try again later.</Text>
+            ) : (
+              <View style={styles.doctorList}>
+                {doctors.map(doc => (
+                  <TouchableOpacity
+                    key={doc.id}
+                    style={[styles.doctorItem, selectedDoctor?.id === doc.id && styles.doctorItemSelected]}
+                    onPress={() => setSelectedDoctor(doc)}
+                  >
+                    <View style={styles.doctorInfo}>
+                      <Text style={[styles.doctorName, selectedDoctor?.id === doc.id && { color: '#1B6CA8' }]}>
+                        {doc.name}
+                      </Text>
+                      <Text style={styles.doctorMeta}>{doc.speciality} • {doc.hospital}</Text>
+                    </View>
+                    {selectedDoctor?.id === doc.id && (
+                      <Ionicons name="checkmark-circle" size={20} color="#1B6CA8" />
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
 
+            {/* Access Level */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Access Level</Text>
               <View style={styles.rowChoices}>
-                <TouchableOpacity 
-                  style={[styles.choiceBtn, newConsent.data_scope === 'full' && styles.choiceBtnActive]}
-                  onPress={() => setNewConsent({...newConsent, data_scope: 'full'})}
+                <TouchableOpacity
+                  style={[styles.choiceBtn, dataScope === 'full' && styles.choiceBtnActive]}
+                  onPress={() => setDataScope('full')}
                 >
-                  <Text style={[styles.choiceText, newConsent.data_scope === 'full' && styles.choiceTextActive]}>Full History</Text>
+                  <Text style={[styles.choiceText, dataScope === 'full' && styles.choiceTextActive]}>Full History</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.choiceBtn, newConsent.data_scope === 'visit_only' && styles.choiceBtnActive]}
-                  onPress={() => setNewConsent({...newConsent, data_scope: 'visit_only'})}
+                <TouchableOpacity
+                  style={[styles.choiceBtn, dataScope === 'visit_only' && styles.choiceBtnActive]}
+                  onPress={() => setDataScope('visit_only')}
                 >
-                  <Text style={[styles.choiceText, newConsent.data_scope === 'visit_only' && styles.choiceTextActive]}>Visit Only</Text>
+                  <Text style={[styles.choiceText, dataScope === 'visit_only' && styles.choiceTextActive]}>Visit Only</Text>
                 </TouchableOpacity>
               </View>
             </View>
 
+            {/* Duration */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Duration</Text>
               <View style={styles.rowChoices}>
                 {[7, 30, 90].map(days => (
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     key={days}
-                    style={[styles.choiceBtn, newConsent.expires_days === days && styles.choiceBtnActive]}
-                    onPress={() => setNewConsent({...newConsent, expires_days: days})}
+                    style={[styles.choiceBtn, expiresDays === days && styles.choiceBtnActive]}
+                    onPress={() => setExpiresDays(days)}
                   >
-                    <Text style={[styles.choiceText, newConsent.expires_days === days && styles.choiceTextActive]}>{days} d</Text>
+                    <Text style={[styles.choiceText, expiresDays === days && styles.choiceTextActive]}>{days}d</Text>
                   </TouchableOpacity>
                 ))}
               </View>
             </View>
 
-            <TouchableOpacity style={styles.grantBtn} onPress={handleGrant}>
-              <Text style={styles.grantBtnText}>Grant Access</Text>
+            <TouchableOpacity style={[styles.grantBtn, !selectedDoctor && styles.grantBtnDisabled]} onPress={handleGrant} disabled={!selectedDoctor}>
+              <Text style={styles.grantBtnText}>
+                {selectedDoctor ? `Grant Access to ${selectedDoctor.name}` : 'Select a doctor first'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -293,9 +335,48 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 10,
   },
+  grantBtnDisabled: {
+    backgroundColor: '#94A3B8',
+  },
   grantBtnText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
-  }
+  },
+  doctorList: {
+    maxHeight: 200,
+    marginBottom: 16,
+  },
+  doctorItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 8,
+    backgroundColor: '#F8FAFC',
+  },
+  doctorItemSelected: {
+    borderColor: '#1B6CA8',
+    backgroundColor: '#EFF6FF',
+  },
+  doctorInfo: { flex: 1 },
+  doctorName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  doctorMeta: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  emptyDoctors: {
+    textAlign: 'center',
+    color: '#94A3B8',
+    fontSize: 14,
+    marginVertical: 16,
+  },
 });

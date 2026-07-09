@@ -41,6 +41,16 @@ export default function DoctorLayout() {
         }}
       />
 
+      {/* Tab 3: Settings */}
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: 'Settings',
+          headerShown: false,
+          tabBarIcon: ({ color, size }) => <Ionicons name="settings-outline" size={size} color={color} />,
+        }}
+      />
+
       {/* Hidden Transition Screens */}
       <Tabs.Screen name="patient/[id]" options={{ href: null, headerShown: false }} />
       <Tabs.Screen name="consultation/[id]" options={{ href: null, headerShown: false }} />

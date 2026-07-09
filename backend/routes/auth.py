@@ -318,6 +318,25 @@ async def get_hospitals():
         h["id"] = str(h.pop("_id"))
     return hospitals
 
+@router.get("/doctors")
+async def get_doctors():
+    """Returns all registered doctors with their id, name, hospital, and speciality."""
+    db = get_database()
+    doctors = await db.users.find(
+        {"role": "doctor", "is_profile_complete": True},
+        {"_id": 1, "name": 1, "hospital": 1, "speciality": 1, "district": 1}
+    ).to_list(length=200)
+    result = []
+    for d in doctors:
+        result.append({
+            "id":        str(d["_id"]),
+            "name":      d.get("name", "Unknown Doctor"),
+            "hospital":  d.get("hospital", "—"),
+            "speciality":d.get("speciality", "General Medicine"),
+            "district":  d.get("district", "—"),
+        })
+    return result
+
 @router.get("/villages")
 async def get_villages():
     db = get_database()
