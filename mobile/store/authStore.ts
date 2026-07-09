@@ -54,10 +54,11 @@ export const useAuthStore = create<AuthState>((set) => ({
       console.warn('Failed to refresh user', e);
     }
   },
+
+  restoreSession: async () => {
     try {
       const token = await SecureStore.getItemAsync('token');
       if (token) {
-        // Always fetch fresh user data from backend on restore
         const response = await api.get('/auth/me');
         const freshUser = response.data;
         await SecureStore.setItemAsync('user', JSON.stringify(freshUser));

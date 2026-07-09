@@ -100,30 +100,32 @@ async def get_household(household_id: str, current_user: UserResponse = Depends(
 async def submit_visit(visit: VisitCreate, current_user: UserResponse = Depends(get_current_user)):
     db = get_database()
     
-    # Verify household ownership
+    # Verify household exists and belongs to this ASHA worker
     hh = await db.households.find_one({"_id": safe_object_id(visit.household_id)})
-    if not hh or hh.get("created_by") != current_user.id:
+    if not hh:
+        raise HTTPException(status_code=404, detail="Household not found")
+    if hh.get("created_by") != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied to this household")
-        
-    # Verify patient is member of the household
-    member_found = False
-    for member in hh.get("members", []):
-        if member.get("patient_id") == visit.member_id:
-            member_found = True
-            break
-    if not member_found:
-        raise HTTPException(status_code=403, detail="Access denied: Patient is not a member of this household")
+
+    # Normalise risk_level — accept URGENT/urgent/red, WATCH/watch/amber, LOW/low/green
+    risk_raw = (visit.risk_level or "WATCH").upper()
+    if risk_raw in ["RED", "URGENT"]:
+        risk = "red"
+    elif risk_raw in ["AMBER", "WATCH"]:
+        risk = "amber"
+    else:
+        risk = "green"
 
     visit_dict = visit.dict()
     visit_dict["asha_id"] = current_user.id
+    visit_dict["risk_level"] = risk
     visit_dict["created_at"] = datetime.utcnow()
     
     res = await db.asha_visits.insert_one(visit_dict)
     visit_id = str(res.inserted_id)
     visit_dict["id"] = visit_id
     
-    urgent = visit_dict["risk_level"].lower() in ["red", "urgent"]
-    risk = "red" if urgent else ("amber" if visit_dict["risk_level"].lower() in ["watch", "amber"] else "green")
+    urgent = risk == "red"
     
     await db.households.update_one(
         {"_id": safe_object_id(visit.household_id)},

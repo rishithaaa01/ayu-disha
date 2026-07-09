@@ -243,13 +243,16 @@ export default function AshaDashboard() {
         
         // 3. Submit visit to backend
         const payload = {
-          household_id: finalVisit.household_id,
-          member_id: finalVisit.member_id,
-          visit_type: finalVisit.visit_type,
-          observations: finalVisit.observations,
-          risk_level: finalVisit.risk_level?.toUpperCase(),
-          ai_reasoning: finalVisit.ai_reasoning,
-          ai_recommendation: finalVisit.ai_recommendation
+          household_id:      finalVisit.household_id,
+          member_id:         finalVisit.member_id || 'unknown',
+          visit_type:        finalVisit.visit_type || 'general',
+          observations:      typeof finalVisit.observations === 'object'
+                               ? finalVisit.observations
+                               : { symptoms: String(finalVisit.observations || '') },
+          voice_notes:       finalVisit.voice_notes || '',
+          risk_level:        (finalVisit.risk_level || 'WATCH').toUpperCase(),
+          ai_reasoning:      finalVisit.ai_reasoning || '',
+          ai_recommendation: finalVisit.ai_recommendation || '',
         };
         await api.post('/asha/visits', payload);
         
