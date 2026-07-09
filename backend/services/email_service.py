@@ -7,7 +7,13 @@ import asyncio
 class EmailService:
     async def send_reset_code(self, to_email: str, reset_code: str) -> bool:
         if not settings.smtp_host or not settings.smtp_username or not settings.smtp_password:
-            print(" SMTP credentials not fully configured. Reset code printed to console only.")
+            # Always print to console so it shows in Render logs
+            print("\n" + "=" * 52)
+            print("  [PASSWORD RESET CODE]")
+            print(f"  Email : {to_email}")
+            print(f"  Code  : {reset_code}")
+            print("  Valid for 15 minutes")
+            print("=" * 52 + "\n")
             return False
 
         # Run SMTP sending in a background thread to prevent blocking the event loop (compatible with Python 3.7+)

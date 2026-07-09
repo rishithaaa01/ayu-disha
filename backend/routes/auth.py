@@ -646,9 +646,10 @@ async def forgot_password(request: ForgotPasswordRequest):
         "message": msg
     }
     
-    # Return reset code for development if SMTP is not configured
-    if not email_sent and settings.debug:
+    # Always return reset code in response when email is not configured
+    if not email_sent:
         response_data["reset_code"] = reset_code
+        response_data["message"] = f"Email not configured. Your reset code is: {reset_code} (valid 15 min)"
 
     return response_data
 
