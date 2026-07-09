@@ -57,8 +57,8 @@ export default function LoginPage() {
     return () => clearTimeout(t);
   }, [countdown, step]);
 
-  const handleSuccessfulLogin = (user: any, token: string) => {
-    loginState(user, token);
+  const handleSuccessfulLogin = (user: any, token: string, refreshToken?: string) => {
+    loginState(user, token, refreshToken);
     const routes: Record<string,string> = { patient:'/patient', asha:'/asha', doctor:'/clinician', admin:'/admin', pho:'/pho' };
     router.push(routes[user.role] ?? '/clinician');
   };
@@ -67,7 +67,7 @@ export default function LoginPage() {
     e.preventDefault(); setLoading(true); setError(''); setSuccessMsg('');
     try {
       const res = await api.post('/auth/login', { email, password });
-      handleSuccessfulLogin(res.data.user, res.data.access_token);
+      handleSuccessfulLogin(res.data.user, res.data.access_token, res.data.refresh_token);
     } catch (err: any) { setError(err.response?.data?.detail || 'Invalid email or password.'); }
     finally { setLoading(false); }
   };
@@ -83,7 +83,7 @@ export default function LoginPage() {
         hospital: regRole === 'doctor' ? regHospital : null,
         village: regRole === 'asha' ? regVillage : null,
       });
-      handleSuccessfulLogin(res.data.user, res.data.access_token);
+      handleSuccessfulLogin(res.data.user, res.data.access_token, res.data.refresh_token);
     } catch (err: any) { setError(err.response?.data?.detail || 'Registration failed.'); }
     finally { setLoading(false); }
   };
@@ -122,7 +122,7 @@ export default function LoginPage() {
       if (res.data.needs_registration) {
         setTempToken(res.data.access_token); setRegPhone(formattedPhone);
         setStep(5); setSuccessMsg('Phone verified! Complete your profile below.');
-      } else { handleSuccessfulLogin(res.data.user, res.data.access_token); }
+      } else { handleSuccessfulLogin(res.data.user, res.data.access_token, res.data.refresh_token); }
     } catch (err: any) { setError(err.response?.data?.detail || 'Verification failed.'); }
     finally { setLoading(false); }
   };
@@ -162,7 +162,7 @@ export default function LoginPage() {
         hospital: regRole === 'doctor' ? regHospital : null,
         village: regRole === 'asha' ? regVillage : null,
       }, { headers: { Authorization: `Bearer ${tempToken}` } });
-      handleSuccessfulLogin(res.data, tempToken);
+      handleSuccessfulLogin(res.data, tempToken, undefined);
     } catch (err: any) { setError(err.response?.data?.detail || 'Failed to complete profile.'); }
     finally { setLoading(false); }
   };

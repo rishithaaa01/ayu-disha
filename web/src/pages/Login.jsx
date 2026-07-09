@@ -125,8 +125,8 @@ export default function Login() {
   };
 
   // Redirect after login
-  const handleSuccessfulLogin = (user, token) => {
-    loginState(user, token);
+  const handleSuccessfulLogin = (user, token, refreshToken) => {
+    loginState(user, token, refreshToken);
     switch (user.role) {
       case 'patient':
         navigate('/patient');
@@ -159,7 +159,7 @@ export default function Login() {
         email: email,
         password: password
       });
-      handleSuccessfulLogin(res.data.user, res.data.access_token);
+      handleSuccessfulLogin(res.data.user, res.data.access_token, res.data.refresh_token);
     } catch (err) {
       setError(err.response?.data?.detail || 'Invalid email or password.');
     } finally {
@@ -199,7 +199,7 @@ export default function Login() {
       };
       const res = await api.post('/auth/register', payload);
       setSuccessMsg('Account created successfully!');
-      handleSuccessfulLogin(res.data.user, res.data.access_token);
+      handleSuccessfulLogin(res.data.user, res.data.access_token, res.data.refresh_token);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to complete registration.');
     } finally {
@@ -274,7 +274,7 @@ export default function Login() {
         setError('');
         setSuccessMsg('Phone verified! Please complete your profile details below.');
       } else {
-        handleSuccessfulLogin(res.data.user, res.data.access_token);
+        handleSuccessfulLogin(res.data.user, res.data.access_token, res.data.refresh_token);
       }
     } catch (err) {
       setError(err.response?.data?.detail || 'Verification failed. Check the OTP and try again.');
@@ -364,7 +364,7 @@ export default function Login() {
         }
       });
       setSuccessMsg('Profile completed successfully!');
-      handleSuccessfulLogin(res.data, token);
+      handleSuccessfulLogin(res.data, token, undefined);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to complete profile registration.');
     } finally {

@@ -52,8 +52,8 @@ export default function LoginScreen() {
     }
   };
 
-  const handleSuccessfulLogin = async (user: any, token: string) => {
-    await loginState(user, token);
+  const handleSuccessfulLogin = async (user: any, token: string, refreshToken?: string) => {
+    await loginState(user, token, refreshToken);
     router.replace('/');
   };
 
@@ -67,7 +67,7 @@ export default function LoginScreen() {
         email: email.trim().toLowerCase(),
         password: password
       });
-      await handleSuccessfulLogin(res.data.user, res.data.access_token);
+      await handleSuccessfulLogin(res.data.user, res.data.access_token, res.data.refresh_token);
     } catch (err: any) {
       console.error(err);
       const msg = err.response?.data?.detail || "Invalid credentials. Please try again.";
@@ -100,7 +100,7 @@ export default function LoginScreen() {
       };
       const res = await api.post('/auth/register', payload);
       Alert.alert("Success", "Account created successfully!");
-      await handleSuccessfulLogin(res.data.user, res.data.access_token);
+      await handleSuccessfulLogin(res.data.user, res.data.access_token, res.data.refresh_token);
     } catch (err: any) {
       console.error(err);
       const msg = err.response?.data?.detail || "Registration failed. Please try again.";

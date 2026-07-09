@@ -17,7 +17,7 @@ interface AuthState {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
-  login: (user: User, token: string) => void;
+  login: (user: User, token: string, refreshToken?: string) => void;
   logout: () => void;
   hydrate: () => void;
   refreshUser: () => Promise<void>;
@@ -35,9 +35,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user, token, isAuthenticated: !!token });
   },
 
-  login: (user, token) => {
+  login: (user, token, refreshToken) => {
     localStorage.setItem('user', JSON.stringify(user));
     localStorage.setItem('token', token);
+    if (refreshToken) localStorage.setItem('refresh_token', refreshToken);
     document.cookie = `auth_token=${token}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
     set({ user, token, isAuthenticated: true });
   },
@@ -45,6 +46,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   logout: () => {
     localStorage.removeItem('user');
     localStorage.removeItem('token');
+    localStorage.removeItem('refresh_token');
     document.cookie = 'auth_token=; path=/; max-age=0';
     set({ user: null, token: null, isAuthenticated: false });
   },

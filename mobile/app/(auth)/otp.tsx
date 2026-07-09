@@ -32,8 +32,8 @@ export default function OTPScreen() {
         language: 'en',
       });
 
-      const { access_token, user, needs_registration } = response.data;
-      await login(user, access_token);
+      const { access_token, refresh_token, user, needs_registration } = response.data;
+      await login(user, access_token, refresh_token);
 
       if (needs_registration) {
         router.replace('/(auth)/register');
