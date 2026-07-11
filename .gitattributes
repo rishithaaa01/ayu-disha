@@ -1,0 +1,11 @@
+# Force GitHub to detect these folders as code
+backend/* linguist-vendored=false
+mobile/* linguist-vendored=false
+web/* linguist-vendored=false
+
+# Ensure common languages are detected
+*.py linguist-detectable=true
+*.ts linguist-detectable=true
+*.tsx linguist-detectable=true
+*.js linguist-detectable=true
+*.jsx linguist-detectable=true
