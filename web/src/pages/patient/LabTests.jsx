@@ -81,6 +81,11 @@ export default function LabTests() {
                           href={lab.pdf_url}
                           target="_blank"
                           rel="noopener noreferrer"
+                          onClick={(e) => {
+                            // Open PDF in new tab without sending auth headers
+                            e.preventDefault();
+                            window.open(lab.pdf_url, '_blank', 'noopener,noreferrer');
+                          }}
                           className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-semibold bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors"
                         >
                           <ExternalLink size={12} /> View PDF

@@ -1,5 +1,6 @@
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
+import ErrorBoundary from './components/ErrorBoundary';
 import Login from './pages/Login';
 import ClinicianApp from './pages/clinician/ClinicianApp';
 import AdminDashboard from './pages/admin/Dashboard';
@@ -21,10 +22,11 @@ function ProtectedRoute({ children, allowedRoles }) {
 
 function App() {
   return (
-    <HashRouter>
-      <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route path="/login" element={<Login />} />
+    <ErrorBoundary>
+      <HashRouter>
+        <Routes>
+          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="/login" element={<Login />} />
 
         {/* Clinician / Doctor routes */}
         <Route
@@ -130,6 +132,7 @@ function App() {
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </HashRouter>
+    </ErrorBoundary>
   );
 }
 

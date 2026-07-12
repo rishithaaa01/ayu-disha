@@ -388,6 +388,11 @@ export default function LabDashboard() {
                           href={order.pdf_url}
                           target="_blank"
                           rel="noopener noreferrer"
+                          onClick={(e) => {
+                            // Open PDF without auth headers
+                            e.preventDefault();
+                            window.open(order.pdf_url, '_blank', 'noopener,noreferrer');
+                          }}
                           className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-semibold bg-blue-50 px-3 py-1.5 rounded-lg"
                         >
                           <ExternalLink size={12} /> PDF

@@ -229,6 +229,11 @@ export default function PatientRecordPanel({ patientId, initialData }: PatientRe
                             href={lab.pdf_url}
                             target="_blank"
                             rel="noopener noreferrer"
+                            onClick={(e) => {
+                              // Open PDF in new tab, preventing auth headers from being sent
+                              e.preventDefault();
+                              window.open(lab.pdf_url, '_blank', 'noopener,noreferrer');
+                            }}
                             className="flex items-center gap-1 text-xs text-blue-600 font-semibold bg-blue-50 px-2.5 py-1 rounded-lg hover:bg-blue-100 transition-colors"
                           >
                             <span>PDF</span>
