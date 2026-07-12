@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../services/api';
+import toast from 'react-hot-toast';
 import {
   Users, Activity, Hospital, ShieldCheck, LogOut,
   TrendingUp, AlertTriangle, CheckCircle, Clock,
-  BarChart2, Map, RefreshCcw
+  BarChart2, Map, RefreshCcw, Plus, Trash2, Building2
 } from 'lucide-react';
 
 function StatCard({ title, value, subtitle, icon: Icon, color, trend }) {
@@ -32,7 +33,14 @@ function StatCard({ title, value, subtitle, icon: Icon, color, trend }) {
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const { logout } = useAuthStore();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('overview');
+
+  // Hospital form state
+  const [hospitalForm, setHospitalForm] = useState({
+    name: '', type: 'govt', district: 'Chennai', state: 'Tamil Nadu'
+  });
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
   const { data: stats, isLoading, refetch } = useQuery({
     queryKey: ['adminStats'],
@@ -47,6 +55,46 @@ export default function AdminDashboard() {
     refetchInterval: 30000,
     retry: 1,
   });
+
+  // Hospital queries & mutations
+  const { data: hospitals = [], isLoading: hospitalsLoading } = useQuery({
+    queryKey: ['adminHospitals'],
+    queryFn: () => api.get('/admin/hospitals').then(r => r.data),
+    enabled: activeTab === 'hospitals',
+  });
+
+  const addHospitalMutation = useMutation({
+    mutationFn: (data) => api.post('/admin/hospitals', data).then(r => r.data),
+    onSuccess: (newH) => {
+      queryClient.invalidateQueries({ queryKey: ['adminHospitals'] });
+      queryClient.invalidateQueries({ queryKey: ['adminStats'] });
+      setHospitalForm({ name: '', type: 'govt', district: 'Chennai', state: 'Tamil Nadu' });
+      toast.success(`Hospital "${newH.name}" added successfully`);
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.detail || 'Failed to add hospital');
+    },
+  });
+
+  const deleteHospitalMutation = useMutation({
+    mutationFn: (id) => api.delete(`/admin/hospitals/${id}`).then(r => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminHospitals'] });
+      queryClient.invalidateQueries({ queryKey: ['adminStats'] });
+      setDeleteConfirmId(null);
+      toast.success('Hospital removed successfully');
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.detail || 'Failed to delete hospital');
+      setDeleteConfirmId(null);
+    },
+  });
+
+  const handleAddHospital = (e) => {
+    e.preventDefault();
+    if (!hospitalForm.name.trim()) return;
+    addHospitalMutation.mutate(hospitalForm);
+  };
 
   const handleLogout = () => {
     logout();
@@ -220,11 +268,135 @@ export default function AdminDashboard() {
         )}
 
         {activeTab === 'hospitals' && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
-            <Hospital size={48} className="text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-bold text-gray-600">Hospital Registry</h3>
-            <p className="text-gray-400 text-sm mt-2">Manage registered hospitals and facilities</p>
-            <p className="text-xs text-gray-300 mt-4">Hospital management coming in next release</p>
+          <div className="space-y-6">
+            {/* Add Hospital Form */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <h3 className="text-base font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <Plus size={18} className="text-[#1B6CA8]" />
+                Add New Hospital
+              </h3>
+              <form onSubmit={handleAddHospital} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="lg:col-span-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
+                    Hospital Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={hospitalForm.name}
+                    onChange={e => setHospitalForm(f => ({ ...f, name: e.target.value }))}
+                    placeholder="e.g. PHC Ambattur"
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-[#1B6CA8]"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
+                    Type
+                  </label>
+                  <select
+                    value={hospitalForm.type}
+                    onChange={e => setHospitalForm(f => ({ ...f, type: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-[#1B6CA8] bg-white"
+                  >
+                    <option value="govt">Government</option>
+                    <option value="private">Private</option>
+                    <option value="ngo">NGO / Trust</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
+                    District
+                  </label>
+                  <input
+                    type="text"
+                    value={hospitalForm.district}
+                    onChange={e => setHospitalForm(f => ({ ...f, district: e.target.value }))}
+                    placeholder="e.g. Chennai"
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-[#1B6CA8]"
+                  />
+                </div>
+                <div className="sm:col-span-2 lg:col-span-4 flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={addHospitalMutation.isPending}
+                    className="bg-[#1B6CA8] hover:bg-[#155A8A] text-white px-6 py-2.5 rounded-xl font-bold text-sm transition-all disabled:opacity-50 flex items-center gap-2"
+                  >
+                    <Plus size={16} />
+                    {addHospitalMutation.isPending ? 'Adding...' : 'Add Hospital'}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Hospital List */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                  <Building2 size={18} className="text-[#1B6CA8]" />
+                  Registered Hospitals
+                  <span className="text-xs font-semibold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full ml-1">
+                    {hospitals.length}
+                  </span>
+                </h3>
+              </div>
+
+              {hospitalsLoading ? (
+                <div className="p-8 text-center text-gray-400 text-sm">Loading hospitals...</div>
+              ) : hospitals.length === 0 ? (
+                <div className="p-8 text-center text-gray-400 text-sm">No hospitals registered yet.</div>
+              ) : (
+                <div className="divide-y divide-gray-50">
+                  {hospitals.map(h => (
+                    <div key={h.id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center gap-4">
+                        <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                          <Hospital size={18} className="text-[#1B6CA8]" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-800">{h.name}</p>
+                          <p className="text-xs text-gray-400">{h.district}, {h.state}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase ${
+                          h.type === 'govt' ? 'bg-green-100 text-green-700' :
+                          h.type === 'private' ? 'bg-purple-100 text-purple-700' :
+                          'bg-amber-100 text-amber-700'
+                        }`}>
+                          {h.type === 'govt' ? 'Government' : h.type === 'private' ? 'Private' : 'NGO'}
+                        </span>
+                        {deleteConfirmId === h.id ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-red-600 font-semibold">Confirm?</span>
+                            <button
+                              onClick={() => deleteHospitalMutation.mutate(h.id)}
+                              disabled={deleteHospitalMutation.isPending}
+                              className="text-xs bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-lg font-bold transition-all disabled:opacity-50"
+                            >
+                              Yes, Delete
+                            </button>
+                            <button
+                              onClick={() => setDeleteConfirmId(null)}
+                              className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1 rounded-lg font-bold transition-all"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setDeleteConfirmId(h.id)}
+                            className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                            title="Delete hospital"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

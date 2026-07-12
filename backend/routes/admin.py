@@ -1,10 +1,28 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from typing import Optional
+from bson import ObjectId
 from database import get_database
 from middleware.auth_middleware import get_current_user, require_role
 from models.user import UserResponse
 from datetime import datetime, timedelta
 
 router = APIRouter()
+
+# ─── Hospital Management Models ───────────────────────────────────────────────
+
+class HospitalCreate(BaseModel):
+    name: str
+    type: str = "govt"          # govt | private | ngo
+    district: str = "Chennai"
+    state: str = "Tamil Nadu"
+
+class HospitalResponse(BaseModel):
+    id: str
+    name: str
+    type: str
+    district: str
+    state: str
 
 
 @router.get("/stats")
@@ -88,3 +106,80 @@ async def get_recent_activity(current_user: UserResponse = Depends(require_role(
     # Sort by recency (approximate — all have time strings, sort by created_at from original docs)
     activities = activities[:10]
     return activities
+
+# ─── Hospital Management Endpoints ────────────────────────────────────────────
+
+@router.get("/hospitals")
+async def list_hospitals(current_user: UserResponse = Depends(require_role("admin"))):
+    db = get_database()
+    hospitals = await db.hospitals.find({}).sort("name", 1).to_list(length=200)
+    result = []
+    for h in hospitals:
+        result.append({
+            "id":       str(h["_id"]),
+            "name":     h.get("name", ""),
+            "type":     h.get("type", "govt"),
+            "district": h.get("district", ""),
+            "state":    h.get("state", ""),
+        })
+    return result
+
+
+@router.post("/hospitals", status_code=201)
+async def add_hospital(
+    payload: HospitalCreate,
+    current_user: UserResponse = Depends(require_role("admin"))
+):
+    db = get_database()
+
+    # Prevent duplicates (case-insensitive name + district)
+    existing = await db.hospitals.find_one({
+        "name":     {"$regex": f"^{payload.name.strip()}$", "$options": "i"},
+        "district": payload.district.strip()
+    })
+    if existing:
+        raise HTTPException(status_code=400, detail="A hospital with this name already exists in that district.")
+
+    new_hospital = {
+        "name":       payload.name.strip(),
+        "type":       payload.type,
+        "district":   payload.district.strip(),
+        "state":      payload.state.strip(),
+        "created_at": datetime.utcnow(),
+        "created_by": current_user.id,
+    }
+    result = await db.hospitals.insert_one(new_hospital)
+    return {
+        "id":       str(result.inserted_id),
+        "name":     new_hospital["name"],
+        "type":     new_hospital["type"],
+        "district": new_hospital["district"],
+        "state":    new_hospital["state"],
+    }
+
+
+@router.delete("/hospitals/{hospital_id}", status_code=200)
+async def delete_hospital(
+    hospital_id: str,
+    current_user: UserResponse = Depends(require_role("admin"))
+):
+    db = get_database()
+
+    try:
+        oid = ObjectId(hospital_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid hospital ID format.")
+
+    # Check if any doctor is still affiliated with this hospital
+    affiliated = await db.users.count_documents({"role": "doctor", "hospital": hospital_id})
+    if affiliated > 0:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot delete — {affiliated} doctor(s) are affiliated with this hospital."
+        )
+
+    result = await db.hospitals.delete_one({"_id": oid})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Hospital not found.")
+
+    return {"status": "success", "message": "Hospital deleted successfully."}
