@@ -831,6 +831,40 @@ async def create_lab_orders(data: LabOrderCreate, current_user: UserResponse = D
         
     return {"status": "success", "count": len(orders)}
 
+
+class LabResultUpdate(BaseModel):
+    result: str
+    result_notes: Optional[str] = None
+
+@router.patch("/lab-orders/{lab_id}/result")
+async def update_lab_result(
+    lab_id: str,
+    data: LabResultUpdate,
+    current_user: UserResponse = Depends(require_role("doctor"))
+):
+    """
+    Doctor enters the lab result — updates status to 'resulted'.
+    """
+    db = get_database()
+
+    lab = await db.lab_orders.find_one({"_id": safe_object_id(lab_id)})
+    if not lab:
+        raise HTTPException(status_code=404, detail="Lab order not found")
+    if lab.get("hospital_id") != current_user.hospital:
+        raise HTTPException(status_code=403, detail="Access denied to this lab order")
+
+    await db.lab_orders.update_one(
+        {"_id": safe_object_id(lab_id)},
+        {"$set": {
+            "result": data.result.strip(),
+            "result_notes": data.result_notes,
+            "result_date": datetime.utcnow(),
+            "resulted_by": current_user.name,
+            "status": "resulted"
+        }}
+    )
+    return {"status": "success", "message": "Lab result updated."}
+
 @router.post("/referrals")
 async def create_referral(data: ReferralCreate, current_user: UserResponse = Depends(require_role("doctor"))):
     """
