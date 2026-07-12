@@ -25,12 +25,52 @@ export default function VoiceSymptomLogger({ onClose, onLogSuccess }) {
     }
   }, [hospitals]);
 
-  // Load offline data if exists
+  // Load offline data if exists and try to sync
   useEffect(() => {
-    const offlineAudio = localStorage.getItem(`offline_symptom_audio_temp`);
-    if (offlineAudio) {
-      toast('You have an offline voice note to sync!', { icon: '🔄' });
-    }
+    const checkAndSyncOfflineData = async () => {
+      const offlineAudio = localStorage.getItem(`offline_symptom_audio_temp`);
+      if (!offlineAudio) return;
+
+      // Check if user is online
+      if (!navigator.onLine) {
+        toast('You have an offline voice note waiting to sync when online.', { icon: '🔄' });
+        return;
+      }
+
+      // Try to sync the offline data
+      try {
+        toast.loading('Syncing offline voice note...');
+        const base64Data = offlineAudio;
+        
+        // Convert base64 to blob
+        const arr = base64Data.split(',');
+        const mime = arr[0].match(/:(.*?);/)[1];
+        const bstr = atob(arr[1]);
+        const n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        for (let i = 0; i < n; i++) {
+          u8arr[i] = bstr.charCodeAt(i);
+        }
+        const audioBlob = new Blob([u8arr], { type: mime });
+
+        // Re-submit to server
+        const formData = new FormData();
+        formData.append('file', audioBlob, 'symptom.wav');
+        await api.post('/voice/transcribe', formData);
+        
+        localStorage.removeItem(`offline_symptom_audio_temp`);
+        toast.success('Offline voice note synced successfully!');
+      } catch (err) {
+        console.error('Failed to sync offline audio:', err);
+        // Don't show error toast - just keep it offline for later
+      }
+    };
+
+    checkAndSyncOfflineData();
+
+    // Also listen for online event
+    window.addEventListener('online', checkAndSyncOfflineData);
+    return () => window.removeEventListener('online', checkAndSyncOfflineData);
   }, []);
 
   const formatTime = (seconds) => {
