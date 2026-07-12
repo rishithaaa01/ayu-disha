@@ -25,6 +25,8 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 20
+      - key: VITE_BASE_PATH
+        value: /
     routes:
       - type: rewrite
         source: /*

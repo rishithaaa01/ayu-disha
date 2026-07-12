@@ -30,6 +30,8 @@ jobs:
         run: npm ci
 
       - name: Build production bundle
+        env:
+          VITE_BASE_PATH: /ayu-disha/
         run: npm run build
 
       - name: Deploy to GitHub Pages
