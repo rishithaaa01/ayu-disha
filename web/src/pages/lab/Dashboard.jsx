@@ -13,6 +13,10 @@ import {
 export default function LabDashboard() {
   const navigate = useNavigate();
   const { logout, user } = useAuthStore();
+  
+  // Debug logging
+  console.log('LabDashboard mounted, user:', user);
+  
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('pending');
   const [uploadingId, setUploadingId] = useState(null);
@@ -23,18 +27,26 @@ export default function LabDashboard() {
   const fileInputRef = useRef(null);
 
   // Fetch pending orders — refetch every 30s
-  const { data: pendingOrders = [], isLoading: pendingLoading, refetch: refetchPending } = useQuery({
+  const { data: pendingOrders = [], isLoading: pendingLoading, refetch: refetchPending, isError: pendingError, error: pendingErrorDetails } = useQuery({
     queryKey: ['labPendingOrders'],
     queryFn: () => api.get('/lab/pending-orders').then(r => r.data),
     refetchInterval: 30000,
+    retry: 1,
+    onError: (error) => {
+      console.error('Failed to fetch pending orders:', error);
+    }
   });
 
   // Fetch completed orders
-  const { data: completedOrders = [], isLoading: completedLoading } = useQuery({
+  const { data: completedOrders = [], isLoading: completedLoading, isError: completedError } = useQuery({
     queryKey: ['labCompletedOrders'],
     queryFn: () => api.get('/lab/completed-orders').then(r => r.data),
     enabled: activeTab === 'completed',
     refetchInterval: 60000,
+    retry: 1,
+    onError: (error) => {
+      console.error('Failed to fetch completed orders:', error);
+    }
   });
 
   const uploadMutation = useMutation({
@@ -85,6 +97,16 @@ export default function LabDashboard() {
 
   return (
     <div className="min-h-screen bg-[#F7F3EE]">
+      {/* Error boundary for API failures */}
+      {(pendingError || completedError) && (
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 m-4">
+          <p className="text-red-700 font-semibold">Failed to load lab data</p>
+          <p className="text-sm text-red-600 mt-1">
+            {pendingErrorDetails?.response?.data?.detail || pendingErrorDetails?.message || 'Please check your connection and try refreshing.'}
+          </p>
+        </div>
+      )}
+      
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm">
         <div className="flex items-center gap-3">

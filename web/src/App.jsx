@@ -110,6 +110,14 @@ function App() {
 
         {/* Lab Tech routes */}
         <Route
+          path="/lab"
+          element={
+            <ProtectedRoute allowedRoles={['lab']}>
+              <LabDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/lab/*"
           element={
             <ProtectedRoute allowedRoles={['lab']}>

@@ -176,7 +176,7 @@ export default function Login() {
     setError('');
     setSuccessMsg('');
 
-    if (regRole === 'doctor' && !regHospital) {
+    if ((regRole === 'doctor' || regRole === 'lab') && !regHospital) {
       setError('Please select your hospital');
       setLoading(false);
       return;
@@ -196,7 +196,7 @@ export default function Login() {
         role: regRole,
         language: regLanguage,
         district: regDistrict,
-        hospital: regRole === 'doctor' ? regHospital : null,
+        hospital: (regRole === 'doctor' || regRole === 'lab') ? regHospital : null,
         village: regRole === 'asha' ? regVillage : null
       };
       const res = await api.post('/auth/register', payload);
@@ -338,7 +338,7 @@ export default function Login() {
     setError('');
     setSuccessMsg('');
 
-    if (regRole === 'doctor' && !regHospital) {
+    if ((regRole === 'doctor' || regRole === 'lab') && !regHospital) {
       setError('Please select your hospital');
       setLoading(false);
       return;
@@ -355,7 +355,7 @@ export default function Login() {
         role: regRole,
         language: regLanguage,
         district: regDistrict,
-        hospital: regRole === 'doctor' ? regHospital : null,
+        hospital: (regRole === 'doctor' || regRole === 'lab') ? regHospital : null,
         village: regRole === 'asha' ? regVillage : null
       };
       
@@ -1080,12 +1080,14 @@ export default function Login() {
               </div>
 
               {/* Conditional Hospital Selector */}
-              {regRole === 'doctor' && (
+              {(regRole === 'doctor' || regRole === 'lab') && (
                 <div className="space-y-2 animate-fadeIn">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500">Select Clinical Hospital</label>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500">
+                    {regRole === 'lab' ? 'Select Laboratory / Hospital' : 'Select Clinical Hospital'}
+                  </label>
                   <div className="relative flex items-center border border-gray-300 rounded-xl bg-white focus-within:ring-2 focus-within:ring-[#1B6CA8] overflow-hidden">
                     <div className="pl-4 text-gray-400">
-                      <Activity size={16} />
+                      {regRole === 'lab' ? <FlaskConical size={16} /> : <Activity size={16} />}
                     </div>
                     <select
                       value={regHospital}
@@ -1093,7 +1095,7 @@ export default function Login() {
                       className="w-full p-3 bg-transparent outline-none text-sm text-gray-700 appearance-none bg-white cursor-pointer"
                       required
                     >
-                      <option value="">-- Choose Hospital --</option>
+                      <option value="">-- Choose {regRole === 'lab' ? 'Laboratory' : 'Hospital'} --</option>
                       {hospitals.map(h => (
                         <option key={h.id} value={h.name}>{h.name}</option>
                       ))}
