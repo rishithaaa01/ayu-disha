@@ -42,18 +42,25 @@ export default function AdminDashboard() {
   });
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
-  const { data: stats, isLoading, refetch } = useQuery({
+  const { data: stats, isLoading, refetch, isError } = useQuery({
     queryKey: ['adminStats'],
     queryFn: () => api.get('/admin/stats').then(r => r.data),
     refetchInterval: 60000,
     retry: 1,
+    onError: (error) => {
+      console.error('Failed to fetch admin stats:', error);
+      toast.error('Failed to load statistics');
+    }
   });
 
-  const { data: recentActivity } = useQuery({
+  const { data: recentActivity = [], isError: activityError } = useQuery({
     queryKey: ['adminActivity'],
     queryFn: () => api.get('/admin/activity').then(r => r.data),
     refetchInterval: 30000,
     retry: 1,
+    onError: (error) => {
+      console.error('Failed to fetch activity:', error);
+    }
   });
 
   // Hospital queries & mutations
@@ -166,7 +173,13 @@ export default function AdminDashboard() {
         {activeTab === 'overview' && (
           <>
             {/* Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+            {isError ? (
+              <div className="bg-red-50 border border-red-200 rounded-2xl p-6 mb-8">
+                <p className="text-red-600 font-semibold">Failed to load statistics</p>
+                <p className="text-sm text-red-500 mt-1">Please check your connection and try refreshing.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
               <StatCard
                 title="Total Patients"
                 value={isLoading ? '...' : stats?.total_patients?.toLocaleString()}
@@ -196,7 +209,9 @@ export default function AdminDashboard() {
                 color="bg-orange-100 text-orange-600"
               />
             </div>
+            )}
 
+            {!isError && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
               <StatCard
                 title="Visits Today"
@@ -227,6 +242,7 @@ export default function AdminDashboard() {
                 color="bg-indigo-100 text-indigo-600"
               />
             </div>
+            )}
 
             {/* Recent Activity */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -235,7 +251,12 @@ export default function AdminDashboard() {
                 <span className="text-xs text-gray-400">Live feed</span>
               </div>
               <div className="divide-y divide-gray-50">
-                {(recentActivity || []).map((item, i) => (
+                {recentActivity.length === 0 ? (
+                  <div className="px-6 py-8 text-center text-gray-400 text-sm">
+                    No recent activity to display
+                  </div>
+                ) : (
+                  recentActivity.map((item, i) => (
                   <div key={i} className="px-6 py-4 flex items-start gap-4 hover:bg-gray-50 transition-colors">
                     <div className={`w-2 h-2 rounded-full mt-2 shrink-0 ${
                       item.severity === 'urgent' ? 'bg-red-500' :
@@ -252,7 +273,8 @@ export default function AdminDashboard() {
                       {item.type}
                     </span>
                   </div>
-                ))}
+                ))
+                )}
               </div>
             </div>
           </>
