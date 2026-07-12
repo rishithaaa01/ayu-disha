@@ -15,12 +15,31 @@ import LabDashboard from './pages/lab/Dashboard';
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { isAuthenticated, user } = useAuthStore();
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (allowedRoles && !allowedRoles.includes(user?.role)) return <Navigate to="/login" replace />;
+  
+  console.log('🔐 ProtectedRoute check:', {
+    isAuthenticated,
+    userRole: user?.role,
+    allowedRoles,
+    userName: user?.name
+  });
+  
+  if (!isAuthenticated) {
+    console.log('❌ Not authenticated, redirecting to login');
+    return <Navigate to="/login" replace />;
+  }
+  
+  if (allowedRoles && !allowedRoles.includes(user?.role)) {
+    console.log('❌ Role not allowed, redirecting to login');
+    return <Navigate to="/login" replace />;
+  }
+  
+  console.log('✅ Access granted, rendering protected content');
   return children;
 }
 
 function App() {
+  console.log('🚀 App component rendering');
+  
   return (
     <ErrorBoundary>
       <HashRouter>
