@@ -178,16 +178,57 @@ async def create_consent(consent_in: ConsentCreate, current_user: UserResponse =
     patient = await db.patients.find_one({"user_id": current_user.id})
     if not patient:
         raise HTTPException(status_code=404, detail="Patient profile not found.")
-        
-    consent_data = consent_in.dict()
-    consent_data["patient_id"] = str(patient["_id"])
-    consent_data["created_at"] = datetime.utcnow()
-    consent_data["expires_at"] = datetime.utcnow() + timedelta(days=consent_in.expires_days)
-    consent_data["revoked"] = False
-    
+
+    # Resolve doctor by ObjectId, mobile number, or email
+    identifier = consent_in.granted_to_id.strip()
+    doctor = None
+
+    # Try ObjectId
+    if len(identifier) == 24:
+        try:
+            doctor = await db.users.find_one({"_id": ObjectId(identifier), "role": "doctor"})
+        except Exception:
+            pass
+
+    # Try mobile number
+    if not doctor:
+        mobile = identifier if identifier.startswith("+") else f"+91{identifier}"
+        doctor = await db.users.find_one({"mobile": mobile, "role": "doctor"})
+
+    # Try email
+    if not doctor:
+        doctor = await db.users.find_one({"email": identifier.lower(), "role": "doctor"})
+
+    if not doctor:
+        raise HTTPException(status_code=404, detail="Doctor not found. Please check the ID, mobile number, or email.")
+
+    doctor_id = str(doctor["_id"])
+    doctor_name = doctor.get("name", "Unknown Doctor")
+
+    # Prevent duplicate active consent
+    existing = await db.consents.find_one({
+        "patient_id": str(patient["_id"]),
+        "granted_to_id": doctor_id,
+        "revoked": False,
+        "expires_at": {"$gt": datetime.utcnow()}
+    })
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Active consent already exists for {doctor_name}. Revoke it first to re-grant.")
+
+    consent_data = {
+        "patient_id": str(patient["_id"]),
+        "granted_to_id": doctor_id,
+        "granted_to_name": doctor_name,
+        "data_scope": consent_in.data_scope,
+        "expires_days": consent_in.expires_days,
+        "created_at": datetime.utcnow(),
+        "expires_at": datetime.utcnow() + timedelta(days=consent_in.expires_days),
+        "revoked": False,
+    }
+
     result = await db.consents.insert_one(consent_data)
     consent_data["_id"] = str(result.inserted_id)
-    
+
     return ConsentResponse(**consent_data)
 
 @router.get("/me/consents", response_model=List[ConsentResponse])
@@ -196,22 +237,21 @@ async def get_consents(current_user: UserResponse = Depends(get_current_user)):
     patient = await db.patients.find_one({"user_id": current_user.id})
     if not patient:
         raise HTTPException(status_code=404, detail="Patient profile not found.")
-        
-    # Get active consents
-    now = datetime.utcnow()
-    consents_cursor = db.consents.find({
-        "patient_id": str(patient["_id"]),
-        "revoked": False,
-        "expires_at": {"$gt": now}
-    }).sort("created_at", -1)
-    
+
+    # Return ALL consents (active + revoked) so frontend can show history
+    consents_cursor = db.consents.find(
+        {"patient_id": str(patient["_id"])}
+    ).sort("created_at", -1)
+
     consents = await consents_cursor.to_list(length=100)
-    
+
     results = []
     for c in consents:
         c["_id"] = str(c["_id"])
+        if "granted_to_id" not in c:
+            c["granted_to_id"] = ""
         results.append(ConsentResponse(**c))
-        
+
     return results
 
 @router.delete("/me/consents/{consent_id}")
@@ -330,7 +370,7 @@ async def log_symptoms(req: SymptomLogRequest, current_user: UserResponse = Depe
             "chief_complaint": f"Self Referral: {req.transcript[:100]}...",
             "status": "in_queue",
             "appointment_type": "referred",
-            "risk_tag": "urgent" if risk_level in ["URGENT", "SEVERE"] else "normal",
+            "risk_tag": "urgent" if risk_level in ["URGENT", "SEVERE"] else "watch",
             "referred_by": "Self (AI Triage)",
             "referral_id": str(ref_res.inserted_id),
             "diagnosis": [],

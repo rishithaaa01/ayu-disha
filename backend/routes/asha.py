@@ -144,23 +144,23 @@ async def submit_visit(visit: VisitCreate, current_user: UserResponse = Depends(
             "urgency": "Today",
             "from_worker_id": current_user.id,
             "from_worker_name": current_user.name,
-            "asha_observations": visit.observations,
+            "asha_observations": str(visit.observations) if visit.observations else "",
             "ai_summary": visit.ai_reasoning,
             "created_at": datetime.utcnow(),
             "status": "pending",
             "asha_id": current_user.id
         }
-        await db.referrals.insert_one(ref_dict)
-        
+        ref_res = await db.referrals.insert_one(ref_dict)
+
         # BRIDGE TO CLINICIAN QUEUE
-        target_hospital = ref_dict["to_hospital_id"]
-        if target_hospital == "AUTO_ASSIGNED":
-            first_hospital = await db.hospitals.find_one({})
-            target_hospital = first_hospital["name"] if first_hospital else "Unassigned"
-            
+        first_hospital = await db.hospitals.find_one({})
+        target_hospital = first_hospital["name"] if first_hospital else "General Hospital"
+
         await db.visits.insert_one({
             "patient_id": visit.member_id,
             "hospital_id": target_hospital,
+            "hospital_name": target_hospital,
+            "doctor_name": "Pending Assignment",
             "date": datetime.utcnow(),
             "created_at": datetime.utcnow(),
             "chief_complaint": f"ASHA Referral: {visit.ai_reasoning[:100]}...",
@@ -168,7 +168,7 @@ async def submit_visit(visit: VisitCreate, current_user: UserResponse = Depends(
             "appointment_type": "referred",
             "risk_tag": "urgent",
             "referred_by": current_user.name,
-            "referral_id": str(ref_dict.get("_id", "manual")),
+            "referral_id": str(ref_res.inserted_id),
             "diagnosis": [],
             "prescriptions": []
         })
@@ -273,8 +273,13 @@ async def send_referral(ref: ReferralCreate, current_user: UserResponse = Depend
         if not visit_check or visit_check.get("asha_id") != current_user.id or visit_check.get("household_id") != ref.household_id:
             raise HTTPException(status_code=403, detail="Access denied to this visit")
             
-    # Verify target hospital exists
-    hospital_check = await db.hospitals.find_one({"$or": [{"name": ref.to_hospital_id}, {"_id": safe_object_id(ref.to_hospital_id)}]})
+    # Verify target hospital exists — search by name first, then ObjectId
+    hospital_check = await db.hospitals.find_one({"name": ref.to_hospital_id})
+    if not hospital_check and len(ref.to_hospital_id) == 24:
+        try:
+            hospital_check = await db.hospitals.find_one({"_id": ObjectId(ref.to_hospital_id)})
+        except Exception:
+            pass
     if not hospital_check:
         raise HTTPException(status_code=400, detail="Target hospital not found in database")
 
@@ -353,8 +358,14 @@ async def get_referrals(current_user: UserResponse = Depends(get_current_user)):
         r["id"] = str(r.pop("_id"))
         
         # Join with patient name
-        patient = await db.patients.find_one({"_id": ObjectId(r["patient_id"])})
-        r["patient_name"] = patient["name"] if patient else "Unknown Patient"
+        try:
+            if r.get("patient_id") and len(str(r["patient_id"])) == 24:
+                patient = await db.patients.find_one({"_id": ObjectId(r["patient_id"])})
+                r["patient_name"] = patient["name"] if patient else "Unknown Patient"
+            else:
+                r["patient_name"] = "Unknown Patient"
+        except Exception:
+            r["patient_name"] = "Unknown Patient"
         
         # Use real hospital name
         r["referred_to"] = r.get("to_hospital_id", "General Hospital")

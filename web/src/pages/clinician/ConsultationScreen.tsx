@@ -61,6 +61,39 @@ export default function ConsultationScreen() {
     retry: false,
   });
 
+  // Recover from page refresh — fetch visit by visitId to get patient_id
+  const { data: visitData } = useQuery({
+    queryKey: ['visit-recovery', visitId],
+    queryFn: async () => {
+      const res = await import('axios').then(m =>
+        m.default.get(
+          `${import.meta.env.VITE_API_URL || 'https://ayu-disha.onrender.com/api'}/clinician/visits/${visitId}`,
+          { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+        )
+      );
+      return res.data;
+    },
+    enabled: !!visitId && !activePatient,
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (visitData && !activePatient) {
+      setActiveVisitId(visitId!);
+    }
+  }, [visitData, activePatient]);
+
+  const resolvedPatientId = activePatient?.patient_id || visitData?.patient_id;
+
+  const { data: recoveredRecord, isLoading: recoveryLoading } = useQuery({
+    queryKey: ['patient-record', resolvedPatientId],
+    queryFn: () => api.getPatientRecord(resolvedPatientId),
+    enabled: !!resolvedPatientId && !activePatient,
+  });
+
+  const effectiveRecord = patientRecord || recoveredRecord;
+  const effectiveLoading = recordLoading || recoveryLoading;
+
   const handleComplete = async () => {
     if (diagnosis.length === 0) {
       toast.error('Please record at least one diagnosis.');
@@ -89,7 +122,7 @@ export default function ConsultationScreen() {
     toast.success('Information extracted from voice note!');
   };
 
-  if (recordLoading || !activePatient) return <div className="p-12"><LoadingSkeleton type="profile" /></div>;
+  if (effectiveLoading || (!activePatient && !resolvedPatientId)) return <div className="p-12"><LoadingSkeleton type="profile" /></div>;
 
   const headerTabs = [
     { id: 'differential', label: 'AI Differential', icon: Sparkles },
@@ -103,7 +136,7 @@ export default function ConsultationScreen() {
     <div className="flex flex-col h-screen bg-[#F7F3EE] overflow-hidden -m-8">
       {/* Patient Header */}
       <PatientHeader 
-        patient={patientRecord} 
+        patient={effectiveRecord} 
         status="active" 
         onStartConsultation={() => {}} 
       />
@@ -121,6 +154,7 @@ export default function ConsultationScreen() {
               timestamp={summaryData?.generated_at ? new Date(summaryData.generated_at).toLocaleTimeString() : null}
               isLoading={summaryLoading}
               onRefresh={() => refetchSummary()}
+              consent={summaryData?.consent}
             />
 
             {/* Symptoms / Chief Complaint */}
@@ -227,30 +261,30 @@ export default function ConsultationScreen() {
                <DifferentialPanel diagnoses={aiDiagnoses} isLoading={aiLoading} symptoms={symptoms} />
              )}
              {activeTab === 'prescription' && (
-                <PrescriptionWriter patient={patientRecord} visitId={visitId!} onSaved={() => setActiveTab('labs')} />
+                <PrescriptionWriter patient={effectiveRecord} visitId={visitId!} onSaved={() => setActiveTab('labs')} />
              )}
              {activeTab === 'labs' && (
-               <LabOrderPanel patient={patientRecord} visitId={visitId!} />
+               <LabOrderPanel patient={effectiveRecord} visitId={visitId!} />
              )}
               {activeTab === 'referral' && (
-                <ReferralPanel patient={patientRecord} visitId={visitId!} symptoms={symptoms} diagnoses={diagnosis} />
+                <ReferralPanel patient={effectiveRecord} visitId={visitId!} symptoms={symptoms} diagnoses={diagnosis} />
               )}
              {activeTab === 'history' && (
                <div className="h-full overflow-y-auto p-4 bg-[#F7F3EE]">
-                 {patientRecord?.consent_status !== 'granted' ? (
+                 {effectiveRecord?.consent_status !== 'granted' ? (
                    <div className="bg-white rounded-2xl border border-[#E2DDD8] p-8 text-center">
                      <FileText size={40} className="text-gray-300 mx-auto mb-3" />
-                     <p className="font-bold text-gray-600">Consent Required</p>
-                     <p className="text-gray-400 text-sm mt-1">Ask the patient to grant access via their Ayu Disha app to view full history.</p>
+                     <p className="font-bold text-gray-600">Consent Required for Full History</p>
+                     <p className="text-gray-400 text-sm mt-1">Ask the patient to grant access via their Ayu Disha app using your registered email or mobile number.</p>
                    </div>
-                 ) : patientRecord?.visits?.length === 0 ? (
+                 ) : effectiveRecord?.visits?.length === 0 ? (
                    <div className="bg-white rounded-2xl border border-[#E2DDD8] p-8 text-center">
                      <FileText size={40} className="text-gray-300 mx-auto mb-3" />
                      <p className="text-gray-400 text-sm">No previous visits found in digital record.</p>
                    </div>
                  ) : (
                    <div className="space-y-3">
-                     {(patientRecord?.visits || []).map((visit: any) => (
+                     {(effectiveRecord?.visits || []).map((visit: any) => (
                        <div key={visit._id} className="bg-white rounded-2xl border border-[#E2DDD8] p-5">
                          <div className="flex items-start justify-between mb-2">
                            <div className="flex items-center gap-2">

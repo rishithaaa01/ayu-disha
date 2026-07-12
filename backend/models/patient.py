@@ -45,12 +45,13 @@ class VisitResponse(BaseModel):
 
 class ConsentCreate(BaseModel):
     granted_to_id: str
-    granted_to_name: str
-    data_scope: str
-    expires_days: int
+    granted_to_name: str = ""   # resolved server-side if empty
+    data_scope: str = "full"
+    expires_days: int = 30
 
 class ConsentResponse(BaseModel):
     id: str = Field(alias="_id")
+    granted_to_id: str = ""
     granted_to_name: str
     data_scope: str
     created_at: datetime

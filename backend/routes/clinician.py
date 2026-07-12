@@ -227,6 +227,22 @@ async def add_to_queue(data: VisitCreate, current_user: UserResponse = Depends(r
     result = await db.visits.insert_one(visit_doc)
     return {"status": "success", "visit_id": str(result.inserted_id), "risk_tag": risk_tag}
 
+@router.get("/visits/{visit_id}")
+async def get_visit(visit_id: str, current_user: UserResponse = Depends(require_role("doctor"))):
+    """
+    Fetches a single visit by ID — used for page refresh recovery in ConsultationScreen.
+    """
+    db = get_database()
+    visit = await db.visits.find_one({"_id": safe_object_id(visit_id)})
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visit not found")
+    return {
+        "id": str(visit["_id"]),
+        "patient_id": visit.get("patient_id"),
+        "hospital_id": visit.get("hospital_id"),
+        "status": visit.get("status"),
+    }
+
 # --- PATIENT RECORD ENDPOINTS ---
 
 @router.get("/patients/{patient_id}")
@@ -330,70 +346,83 @@ async def get_patient_record(patient_id: str, current_user: UserResponse = Depen
 async def get_patient_summary(patient_id: str, current_user: UserResponse = Depends(require_role("doctor"))):
     """
     Generates a 4-sentence AI clinical summary using Groq.
+    Works with or without consent — shows limited info without consent.
     """
     if not current_user.hospital:
         raise HTTPException(status_code=403, detail="Doctor is not assigned to any hospital")
         
     db = get_database()
-    
-    # Enforce Consent check!
+
+    # Check consent
     consent = await db.consents.find_one({
         "patient_id": patient_id,
         "granted_to_id": str(current_user.id),
         "expires_at": {"$gt": datetime.utcnow()},
         "revoked": False
     })
-    if not consent:
-        raise HTTPException(status_code=403, detail="Access denied: Patient consent is required to view summary")
+    has_consent = consent is not None
 
-    # Fetch data for context
+    # Fetch patient basic info (always available)
     patient = await db.patients.find_one({"_id": safe_object_id(patient_id)})
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
-        
-    visits = await db.visits.find({"patient_id": patient_id}).sort("date", -1).limit(10).to_list(10)
-    labs = await db.lab_orders.find({"patient_id": patient_id}).sort("ordered_date", -1).limit(5).to_list(5)
-    
-    # Check for ASHA referral
-    referral = await db.referrals.find_one({
-        "patient_id": patient_id,
-        "status": "pending"
-    })
-    
+
+    # Fetch data based on consent level
+    if has_consent:
+        visits = await db.visits.find({"patient_id": patient_id}).sort("date", -1).limit(10).to_list(10)
+        labs = await db.lab_orders.find({"patient_id": patient_id}).sort("ordered_date", -1).limit(5).to_list(5)
+        referral = await db.referrals.find_one({"patient_id": patient_id, "status": "pending"})
+    else:
+        # Without consent — only use active referral and chief complaint from queue
+        visits = []
+        labs = []
+        referral = await db.referrals.find_one({
+            "patient_id": patient_id,
+            "to_hospital_id": current_user.hospital,
+            "status": {"$in": ["pending", "accepted"]}
+        })
+
     context = f"Patient: {patient['name']}, Gender: {patient['gender']}, DOB: {patient['date_of_birth']}\n"
-    context += f"Allergies: {', '.join(patient.get('allergies', []))}\n"
-    context += f"Recent Visits: {json.dumps(visits[:3], default=str)}\n"
-    context += f"Recent Labs: {json.dumps(labs[:2], default=str)}\n"
+    context += f"Allergies: {', '.join(patient.get('allergies', []) or ['None known'])}\n"
+
+    if has_consent:
+        context += f"Recent Visits: {json.dumps(visits[:3], default=str)}\n"
+        context += f"Recent Labs: {json.dumps(labs[:2], default=str)}\n"
+    else:
+        context += "Note: Full medical history not available — patient consent not granted.\n"
+
     if referral:
-        context += f"ASHA Referral Summary: {referral.get('ai_summary')}\n"
-        
+        context += f"ASHA/Self Referral Summary: {referral.get('ai_summary', '')}\n"
+        context += f"Chief Complaint from Referral: {referral.get('asha_observations', '')}\n"
+
     groq_api_key = settings.groq_api_key
     if not groq_api_key:
-        return {"summary": "AI summary currently unavailable (Check API Key).", "generated_at": datetime.utcnow()}
+        return {"summary": "AI summary unavailable — Groq API key not configured.", "generated_at": datetime.utcnow(), "consent": has_consent}
 
     try:
         client = AsyncGroq(api_key=groq_api_key)
         prompt = f"""You are a clinical assistant for a doctor in India. Generate a focused pre-consultation summary for this patient in exactly 4 sentences.
-        
-        Sentence 1: State their main medical conditions and how long they have had each one.
-        Sentence 2: List their current medications and note any recent changes or additions.
-        Sentence 3: Summarize the most recent visit findings and any significant lab results with values.
-        Sentence 4: State the most important flags for this consultation — allergies, missed follow-ups, worsening lab trends, or ASHA field findings if available.
-        
-        Be precise and clinical. Use medical terminology. No bullet points. No headings. Plain paragraph only. Maximum 120 words total.
-        
-        Context:
-        {context}"""
-        
+
+Sentence 1: State their main medical conditions or reason for visit today based on available information.
+Sentence 2: List any known current medications or note if unavailable due to consent.
+Sentence 3: Summarize the most relevant findings or referral notes available.
+Sentence 4: State the most important flags — allergies, urgent symptoms, or missing data that the doctor should ask about.
+
+Be precise and clinical. Use medical terminology. No bullet points. No headings. Plain paragraph only. Maximum 120 words total.
+{"Full history is available." if has_consent else "Note: Only referral notes available — full history requires patient consent."}
+
+Context:
+{context}"""
+
         chat_completion = await client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
             model="llama-3.3-70b-versatile",
         )
         summary = chat_completion.choices[0].message.content.strip()
-        return {"summary": summary, "generated_at": datetime.utcnow()}
+        return {"summary": summary, "generated_at": datetime.utcnow(), "consent": has_consent}
     except Exception as e:
         print(f"Summary Error: {e}")
-        return {"summary": "Error generating clinical summary.", "error": str(e)}
+        return {"summary": "Unable to generate summary at this time. Please check Groq API configuration.", "generated_at": datetime.utcnow(), "consent": has_consent}
 
 # --- VISIT ENDPOINTS ---
 

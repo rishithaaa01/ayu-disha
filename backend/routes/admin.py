@@ -170,8 +170,12 @@ async def delete_hospital(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid hospital ID format.")
 
-    # Check if any doctor is still affiliated with this hospital
-    affiliated = await db.users.count_documents({"role": "doctor", "hospital": hospital_id})
+    # Check if any doctor is still affiliated with this hospital (stored as name string)
+    hospital_doc = await db.hospitals.find_one({"_id": oid})
+    if not hospital_doc:
+        raise HTTPException(status_code=404, detail="Hospital not found.")
+
+    affiliated = await db.users.count_documents({"role": "doctor", "hospital": hospital_doc["name"]})
     if affiliated > 0:
         raise HTTPException(
             status_code=409,

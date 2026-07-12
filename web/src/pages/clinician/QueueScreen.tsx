@@ -51,7 +51,7 @@ export default function QueueScreen() {
               {isFetching ? 'Updating...' : 'Live'}
             </div>
           </div>
-          <p className="text-sm text-[#666]">{queueData?.length || 0} patients waiting</p>
+          <p className="text-sm text-[#666]">{filteredQueue.length} patient{filteredQueue.length !== 1 ? 's' : ''} {filter === 'all' ? 'waiting' : `(${filter})`}</p>
         </div>
 
         {/* Stats Row */}
@@ -101,7 +101,7 @@ export default function QueueScreen() {
                 key={patient._id}
                 patient={patient}
                 position={idx + 1}
-                isSelected={activePatient?._id === patient.patient_id}
+                isSelected={activePatient?.patient_id === patient.patient_id}
                 onClick={() => setActivePatient(patient)}
               />
             ))

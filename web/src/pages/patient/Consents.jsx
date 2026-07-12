@@ -40,10 +40,14 @@ export default function Consents() {
   const handleGrant = (e) => {
     e.preventDefault();
     if (!doctorId.trim()) {
-      toast.error('Please enter a Doctor ID');
+      toast.error('Please enter a Doctor ID, mobile number, or email');
       return;
     }
-    grantMutation.mutate({ granted_to_id: doctorId.trim(), data_scope: scope });
+    grantMutation.mutate({
+      granted_to_id: doctorId.trim(),
+      data_scope: scope,
+      expires_days: 30,
+    });
   };
 
   const activeConsents = consents.filter(c => !c.revoked);
@@ -95,10 +99,10 @@ export default function Consents() {
                     type="text"
                     value={doctorId}
                     onChange={e => setDoctorId(e.target.value)}
-                    placeholder="Enter the doctor's ID or mobile number"
+                    placeholder="Doctor's mobile number or email"
                     className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#1B6CA8] focus:border-transparent outline-none"
                   />
-                  <p className="text-xs text-gray-400 mt-1">Ask your doctor for their Ayu Disha ID</p>
+                  <p className="text-xs text-gray-400 mt-1">Enter the doctor's registered mobile number or email address</p>
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Access Level</label>
