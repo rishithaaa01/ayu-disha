@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 15
-    allowed_origins: str = "http://localhost:3000,http://localhost:5173"
+    allowed_origins: str = "http://localhost:3000,http://localhost:5173,https://rishithaaa01.github.io"
     firebase_credentials_path: str
     firebase_credentials_json: Optional[str] = None
     groq_api_key: str
