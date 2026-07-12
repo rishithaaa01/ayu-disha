@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Mic, Square, RotateCcw, Send, AlertTriangle, CheckCircle, Activity, X } from 'lucide-react';
 import { useVoiceRecorder } from '../../../hooks/useVoiceRecorder';
 import api from '../../../services/api';
@@ -8,7 +9,21 @@ export default function VoiceSymptomLogger({ onClose, onLogSuccess }) {
   const { isRecording, duration, audioBlob, startRecording, stopRecording, clearRecording } = useVoiceRecorder();
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState(null);
-  const [preferredHospital, setPreferredHospital] = useState("Govt General Hospital Chennai");
+  const [preferredHospital, setPreferredHospital] = useState("");
+
+  // Fetch all registered hospitals from the database
+  const { data: hospitals = [] } = useQuery({
+    queryKey: ['hospitals'],
+    queryFn: () => api.get('/auth/hospitals').then(r => r.data),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Set default selection once hospitals load
+  useEffect(() => {
+    if (hospitals.length > 0 && !preferredHospital) {
+      setPreferredHospital(hospitals[0].name);
+    }
+  }, [hospitals]);
 
   // Load offline data if exists
   useEffect(() => {
@@ -87,9 +102,13 @@ export default function VoiceSymptomLogger({ onClose, onLogSuccess }) {
                   value={preferredHospital}
                   onChange={(e) => setPreferredHospital(e.target.value)}
                 >
-                  <option value="Govt General Hospital Chennai">Govt General Hospital Chennai</option>
-                  <option value="Rural Health Center Kanchipuram">Rural Health Center Kanchipuram</option>
-                  <option value="Taluk Hospital Vellore">Taluk Hospital Vellore</option>
+                  {hospitals.length === 0 ? (
+                    <option value="">Loading hospitals...</option>
+                  ) : (
+                    hospitals.map(h => (
+                      <option key={h.id} value={h.name}>{h.name}</option>
+                    ))
+                  )}
                 </select>
               </div>
 
