@@ -103,38 +103,71 @@ export default function VoiceSymptomLogger({ onClose, onLogSuccess }) {
     setIsProcessing(true);
     
     try {
+      console.log('Starting voice symptom processing...');
+      
       // 1. Transcribe voice note
       const formData = new FormData();
       formData.append('file', audioBlob, 'symptom.wav');
-      const voiceRes = await api.post('/voice/transcribe', formData);
+      
+      console.log('Sending audio to /voice/transcribe');
+      const voiceRes = await api.post('/voice/transcribe', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 30000, // 30 second timeout for transcription
+      });
+      
       const transcript = voiceRes.data.transcript;
+      console.log('Transcription successful:', transcript);
       
       // 2. Classify Risk and Auto-Refer if severe
+      console.log('Sending transcript to /patients/me/symptoms');
       const symptomRes = await api.post('/patients/me/symptoms', {
         transcript,
         preferred_hospital_id: preferredHospital
+      }, {
+        timeout: 15000, // 15 second timeout for symptom analysis
       });
       
+      console.log('Symptom analysis successful:', symptomRes.data);
       setResult(symptomRes.data);
       localStorage.removeItem(`offline_symptom_audio_temp`); // clear any offline cache
       localStorage.removeItem(`offline_symptom_timestamp`);
       if(onLogSuccess) onLogSuccess(symptomRes.data);
     } catch (err) {
-      console.warn("Offline! Storing symptom voice note locally.", err);
-      // Fallback: Save as Base64 in local storage with timestamp
-      const reader = new FileReader();
-      reader.readAsDataURL(audioBlob);
-      reader.onloadend = () => {
-        localStorage.setItem(`offline_symptom_audio_temp`, reader.result);
-        localStorage.setItem(`offline_symptom_timestamp`, Date.now().toString());
+      console.error("Error processing symptoms:", err.response?.status, err.response?.data, err.message);
+      
+      // Only save offline if user is ACTUALLY offline
+      if (!navigator.onLine) {
+        console.log("Device is offline - saving for later sync");
+        const reader = new FileReader();
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = () => {
+          localStorage.setItem(`offline_symptom_audio_temp`, reader.result);
+          localStorage.setItem(`offline_symptom_timestamp`, Date.now().toString());
+          setResult({
+            risk_level: 'WATCH',
+            reasoning: 'Offline mode active. Symptom voice note saved locally. Will sync when online.',
+            refer_to_doctor: false,
+            offline_saved: true
+          });
+          toast.success("Saved offline. Will process when connection returns.");
+        };
+      } else {
+        // Device is online but API failed - show error
+        const errorMsg = err.response?.data?.detail || 
+                        err.response?.data?.message ||
+                        err.message || 
+                        'Failed to process symptoms. Please try again.';
+        console.error("API Error:", errorMsg);
+        toast.error(errorMsg);
         setResult({
-          risk_level: 'WATCH',
-          reasoning: 'Offline mode active. Symptom voice note saved locally. Will sync when online.',
+          risk_level: 'ERROR',
+          reasoning: errorMsg,
           refer_to_doctor: false,
-          offline_saved: true
+          offline_saved: false
         });
-        toast.success("Saved offline. Will process when connection returns.");
-      };
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -222,7 +255,11 @@ export default function VoiceSymptomLogger({ onClose, onLogSuccess }) {
           ) : (
             <div className="py-4">
               <div className="flex flex-col items-center justify-center text-center mb-6">
-                {result.risk_level === 'URGENT' || result.risk_level === 'SEVERE' ? (
+                {result.risk_level === 'ERROR' ? (
+                  <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4">
+                    <AlertTriangle size={32} />
+                  </div>
+                ) : result.risk_level === 'URGENT' || result.risk_level === 'SEVERE' ? (
                   <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4">
                     <AlertTriangle size={32} />
                   </div>
@@ -232,7 +269,7 @@ export default function VoiceSymptomLogger({ onClose, onLogSuccess }) {
                   </div>
                 )}
                 <h4 className="text-xl font-bold text-gray-800">
-                  {result.risk_level === 'URGENT' || result.risk_level === 'SEVERE' ? 'High Risk Detected' : 'Symptoms Logged'}
+                  {result.risk_level === 'ERROR' ? 'Processing Error' : result.risk_level === 'URGENT' || result.risk_level === 'SEVERE' ? 'High Risk Detected' : 'Symptoms Logged'}
                 </h4>
                 <p className="text-gray-500 text-sm mt-2">{result.reasoning}</p>
               </div>
@@ -244,11 +281,18 @@ export default function VoiceSymptomLogger({ onClose, onLogSuccess }) {
                 </div>
               )}
 
+              {result.offline_saved && (
+                <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 mb-6">
+                  <p className="text-amber-800 font-semibold text-sm mb-1">Saved Offline</p>
+                  <p className="text-amber-600 text-xs">Your symptom will be processed when your connection is restored.</p>
+                </div>
+              )}
+
               <button
-                onClick={onClose}
+                onClick={result.risk_level === 'ERROR' ? () => { setResult(null); clearRecording(); } : onClose}
                 className="w-full py-3 bg-gray-900 text-white font-bold rounded-xl hover:bg-gray-800 transition-colors"
               >
-                Done
+                {result.risk_level === 'ERROR' ? 'Try Again' : 'Done'}
               </button>
             </div>
           )}
