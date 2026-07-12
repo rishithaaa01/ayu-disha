@@ -73,7 +73,7 @@ jobs:
         working-directory: web/selenium-tests
         env:
           # Points at the live GitHub Pages deployment
-          TEST_URL: https://${{ github.repository_owner }}.github.io/ayu-disha-1
+          TEST_URL: https://${{ github.repository_owner }}.github.io/ayu-disha
           TEST_EMAIL: ${{ secrets.TEST_EMAIL }}
           TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
         run: npm run login
