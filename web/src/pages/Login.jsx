@@ -53,21 +53,33 @@ export default function Login() {
   // Metadata
   const [hospitals, setHospitals] = useState([]);
   const [villages, setVillages] = useState([]);
+  const [metadataLoading, setMetadataLoading] = useState(false);
 
   // Load hospitals & villages on startup
-  useEffect(() => {
-    const fetchMetadata = async () => {
-      try {
-        const [hospRes, villRes] = await Promise.all([
-          api.get('/auth/hospitals'),
-          api.get('/auth/villages')
-        ]);
-        setHospitals(hospRes.data || []);
-        setVillages(villRes.data || []);
-      } catch (e) {
-        console.error("Failed to load metadata", e);
+  const fetchMetadata = async () => {
+    setMetadataLoading(true);
+    try {
+      const [hospRes, villRes] = await Promise.all([
+        api.get('/auth/hospitals'),
+        api.get('/auth/villages')
+      ]);
+      console.log('Hospitals loaded:', hospRes.data);
+      console.log('Villages loaded:', villRes.data);
+      setHospitals(hospRes.data || []);
+      setVillages(villRes.data || []);
+      
+      if (!hospRes.data || hospRes.data.length === 0) {
+        console.warn('⚠️ No hospitals found in database!');
       }
-    };
+    } catch (e) {
+      console.error("Failed to load metadata", e);
+      setError('Failed to load hospital list. Please check your connection or contact support.');
+    } finally {
+      setMetadataLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchMetadata();
   }, []);
 
@@ -716,12 +728,14 @@ export default function Login() {
                   </div>
 
                   {/* Conditional Hospital Selector */}
-                  {regRole === 'doctor' && (
+                  {(regRole === 'doctor' || regRole === 'lab') && (
                     <div className="space-y-2 animate-fadeIn">
-                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-500">Select Clinical Hospital</label>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-500">
+                        {regRole === 'lab' ? 'Select Laboratory / Hospital' : 'Select Clinical Hospital'}
+                      </label>
                       <div className="relative flex items-center border border-gray-300 rounded-xl bg-white focus-within:ring-2 focus-within:ring-[#1B6CA8] overflow-hidden">
                         <div className="pl-4 text-gray-400">
-                          <Activity size={16} />
+                          {regRole === 'lab' ? <FlaskConical size={16} /> : <Activity size={16} />}
                         </div>
                         <select
                           value={regHospital}
@@ -729,13 +743,30 @@ export default function Login() {
                           className="w-full p-3 bg-transparent outline-none text-sm text-gray-700 appearance-none bg-white cursor-pointer"
                           required
                         >
-                          <option value="">-- Choose Hospital --</option>
-                          {hospitals.map(h => (
-                            <option key={h.id} value={h.name}>{h.name}</option>
-                          ))}
+                          <option value="">-- Choose {regRole === 'lab' ? 'Laboratory' : 'Hospital'} --</option>
+                          {hospitals.length > 0 ? (
+                            hospitals.map(h => (
+                              <option key={h.id} value={h.name}>{h.name}</option>
+                            ))
+                          ) : (
+                            <option value="" disabled>Loading hospitals...</option>
+                          )}
                         </select>
                         <div className="pr-4 pointer-events-none text-gray-400 text-xs">▼</div>
                       </div>
+                      {hospitals.length === 0 && (
+                        <div className="text-xs text-amber-600 mt-1 flex items-center justify-between">
+                          <span>⚠️ No hospitals available. Ask admin to add hospitals first.</span>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.preventDefault(); fetchMetadata(); }}
+                            disabled={metadataLoading}
+                            className="text-blue-600 hover:text-blue-700 font-semibold underline disabled:opacity-50"
+                          >
+                            {metadataLoading ? 'Refreshing...' : 'Refresh List'}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -1096,12 +1127,29 @@ export default function Login() {
                       required
                     >
                       <option value="">-- Choose {regRole === 'lab' ? 'Laboratory' : 'Hospital'} --</option>
-                      {hospitals.map(h => (
-                        <option key={h.id} value={h.name}>{h.name}</option>
-                      ))}
+                      {hospitals.length > 0 ? (
+                        hospitals.map(h => (
+                          <option key={h.id} value={h.name}>{h.name}</option>
+                        ))
+                      ) : (
+                        <option value="" disabled>Loading hospitals...</option>
+                      )}
                     </select>
                     <div className="pr-4 pointer-events-none text-gray-400 text-xs">▼</div>
                   </div>
+                  {hospitals.length === 0 && (
+                    <div className="text-xs text-amber-600 mt-1 flex items-center justify-between">
+                      <span>⚠️ No hospitals available. Ask admin to add hospitals first.</span>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); fetchMetadata(); }}
+                        disabled={metadataLoading}
+                        className="text-blue-600 hover:text-blue-700 font-semibold underline disabled:opacity-50"
+                      >
+                        {metadataLoading ? 'Refreshing...' : 'Refresh List'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
