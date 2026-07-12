@@ -500,6 +500,7 @@ export default function Login() {
                             <Mail size={16} />
                           </div>
                           <input
+                            id="email"
                             type="text"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
@@ -526,6 +527,7 @@ export default function Login() {
                             <Lock size={16} />
                           </div>
                           <input
+                            id="password"
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
@@ -537,6 +539,7 @@ export default function Login() {
                       </div>
 
                       <button
+                        id="login-button"
                         type="submit"
                         disabled={loading}
                         className="w-full bg-[#1B6CA8] hover:bg-[#155A8A] text-white py-3.5 rounded-xl font-bold text-sm shadow-md transition-all active:scale-[0.99] disabled:opacity-50"

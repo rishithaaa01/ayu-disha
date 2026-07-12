@@ -1,0 +1,12 @@
+{
+  "name": "ayu-disha-selenium-tests",
+  "version": "1.0.0",
+  "description": "Selenium E2E tests for AyuDisha web frontend",
+  "scripts": {
+    "login": "mocha tests/login.test.js --timeout 60000"
+  },
+  "dependencies": {
+    "mocha": "^10.4.0",
+    "selenium-webdriver": "^4.21.0"
+  }
+}
