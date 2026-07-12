@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowUpRight, Search, Check, Loader2, Hospital, Stethoscope, AlertTriangle } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { ArrowUpRight, Search, Check, Loader2, Hospital, Stethoscope, AlertTriangle, X } from 'lucide-react';
 import api from '../../../services/clinicianApi';
+import generalApi from '../../../services/api';
 import toast from 'react-hot-toast';
 
 interface ReferralPanelProps {
@@ -12,16 +14,42 @@ interface ReferralPanelProps {
 
 export default function ReferralPanel({ patient, visitId, symptoms, diagnoses }: ReferralPanelProps) {
   const [toHospital, setToHospital] = useState('');
+  const [hospitalSearch, setHospitalSearch] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
   const [speciality, setSpeciality] = useState('General Medicine');
   const [urgency, setUrgency] = useState('routine');
   const [reason, setReason] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Fetch all registered hospitals
+  const { data: hospitals = [] } = useQuery({
+    queryKey: ['hospitals'],
+    queryFn: () => generalApi.get('/auth/hospitals').then(r => r.data),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Filter hospitals based on search input
+  const filteredHospitals = hospitals.filter((h: any) =>
+    h.name.toLowerCase().includes(hospitalSearch.toLowerCase())
+  );
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   // Auto-detect severe indications and pre-fill referral
   useEffect(() => {
     if (!reason && symptoms) {
       const query = symptoms.toLowerCase();
-      const isSevere = 
+      const isSevere =
         query.includes('chest pain') ||
         query.includes('heart attack') ||
         query.includes('stroke') ||
@@ -38,16 +66,13 @@ export default function ReferralPanel({ patient, visitId, symptoms, diagnoses }:
 
       if (isSevere) {
         setUrgency('urgent');
-        
         let targetSpeciality = 'General Medicine';
         if (query.includes('chest') || query.includes('heart') || query.includes('cardiac')) {
           targetSpeciality = 'Cardiology';
         } else if (query.includes('stroke') || query.includes('paralysis') || query.includes('neurolog')) {
           targetSpeciality = 'Neurology';
         }
-        
         setSpeciality(targetSpeciality);
-        setToHospital('Apollo Chennai'); // Preferred specialist facility
         setReason(`Urgent referral recommended due to severe symptoms detected in consultation: "${symptoms}"`);
         toast('🚨 Severe symptoms detected. Urgent specialist referral pre-filled.', { id: 'severe-alert', duration: 5000 });
       }
@@ -60,12 +85,22 @@ export default function ReferralPanel({ patient, visitId, symptoms, diagnoses }:
     'ENT', 'Ophthalmology', 'Nephrology', 'Endocrinology'
   ];
 
+  const handleSelectHospital = (name: string) => {
+    setToHospital(name);
+    setHospitalSearch(name);
+    setShowDropdown(false);
+  };
+
+  const handleClearHospital = () => {
+    setToHospital('');
+    setHospitalSearch('');
+  };
+
   const handleSend = async () => {
     if (!toHospital || !reason) {
       toast.error('Hospital and Reason are required');
       return;
     }
-
     setIsSending(true);
     try {
       await api.sendReferral({
@@ -80,6 +115,7 @@ export default function ReferralPanel({ patient, visitId, symptoms, diagnoses }:
       toast.success('Referral sent successfully');
       setReason('');
       setToHospital('');
+      setHospitalSearch('');
     } catch (e) {
       toast.error('Failed to send referral');
     } finally {
@@ -120,17 +156,62 @@ export default function ReferralPanel({ patient, visitId, symptoms, diagnoses }:
         {/* Hospital Search */}
         <div className="space-y-4">
           <label className="text-[10px] font-bold text-[#888] uppercase tracking-widest block font-sans">2. Target Hospital / Unit</label>
-          <div className="relative">
-             <Hospital size={16} className="absolute left-4 top-4 text-[#888]" />
-             <input
-               type="text"
-               value={toHospital}
-               onChange={(e) => setToHospital(e.target.value)}
-               placeholder="Search facility name..."
-               className="w-full pl-12 pr-4 py-4 bg-white border border-[#E2DDD8] rounded-xl text-sm font-medium focus:outline-none focus:border-[#1B6CA8]"
-             />
+          <div className="relative" ref={dropdownRef}>
+            <Hospital size={16} className="absolute left-4 top-4 text-[#888] z-10" />
+            <input
+              type="text"
+              value={hospitalSearch}
+              onChange={(e) => {
+                setHospitalSearch(e.target.value);
+                setToHospital('');
+                setShowDropdown(true);
+              }}
+              onFocus={() => setShowDropdown(true)}
+              placeholder="Type to search registered hospitals..."
+              className="w-full pl-12 pr-10 py-4 bg-white border border-[#E2DDD8] rounded-xl text-sm font-medium focus:outline-none focus:border-[#1B6CA8]"
+            />
+            {hospitalSearch && (
+              <button
+                onClick={handleClearHospital}
+                className="absolute right-4 top-4 text-gray-400 hover:text-gray-600"
+              >
+                <X size={15} />
+              </button>
+            )}
+            {/* Selected indicator */}
+            {toHospital && (
+              <div className="absolute right-10 top-4">
+                <Check size={15} className="text-green-500" />
+              </div>
+            )}
+            {/* Dropdown */}
+            {showDropdown && hospitalSearch && (
+              <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-[#E2DDD8] rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto">
+                {filteredHospitals.length === 0 ? (
+                  <div className="px-4 py-3 text-sm text-gray-400 italic">No matching hospitals found</div>
+                ) : (
+                  filteredHospitals.map((h: any) => (
+                    <button
+                      key={h.id}
+                      onClick={() => handleSelectHospital(h.name)}
+                      className="w-full text-left px-4 py-3 text-sm hover:bg-blue-50 flex items-center justify-between group transition-colors"
+                    >
+                      <div>
+                        <p className="font-semibold text-gray-800 group-hover:text-[#1B6CA8]">{h.name}</p>
+                        <p className="text-xs text-gray-400">{h.district} · {h.type === 'govt' ? 'Government' : h.type === 'private' ? 'Private' : 'NGO'}</p>
+                      </div>
+                      {toHospital === h.name && <Check size={14} className="text-[#1B6CA8]" />}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
           </div>
-          <p className="text-[10px] text-[#888] italic px-1">Common: AIIMS, Apollo Chennai, GGH Coimbatore</p>
+          {toHospital && (
+            <p className="text-xs text-green-600 font-semibold px-1 flex items-center gap-1">
+              <Check size={12} /> Selected: {toHospital}
+            </p>
+          )}
         </div>
 
         {/* Reason */}
