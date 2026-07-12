@@ -78,6 +78,11 @@ export default function HealthRecords() {
                             <Calendar size={13} />
                             <span>{new Date(visit.date).toLocaleDateString('en-IN', { dateStyle: 'medium' })}</span>
                           </span>
+                          {visit.appointment_type === 'referred' && visit.referred_by === 'Self (AI Triage)' && (
+                            <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                              Self Referral
+                            </span>
+                          )}
                         </div>
                         {visit.diagnosis?.length > 0 && (
                           <div className="flex flex-wrap gap-1.5 mt-2">

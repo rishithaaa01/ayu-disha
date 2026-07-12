@@ -22,7 +22,11 @@ import {
   FlaskConical, 
   ArrowUpRight, 
   History,
-  Layout
+  Layout,
+  Hospital,
+  User,
+  Calendar,
+  FileText
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -48,6 +52,13 @@ export default function ConsultationScreen() {
     queryKey: ['patient-record', activePatient?.patient_id],
     queryFn: () => api.getPatientRecord(activePatient?.patient_id),
     enabled: !!activePatient?.patient_id
+  });
+
+  const { data: summaryData, isLoading: summaryLoading, refetch: refetchSummary } = useQuery({
+    queryKey: ['patient-summary', activePatient?.patient_id],
+    queryFn: () => api.getPatientSummary(activePatient?.patient_id),
+    enabled: !!activePatient?.patient_id,
+    retry: false,
   });
 
   const handleComplete = async () => {
@@ -104,21 +115,13 @@ export default function ConsultationScreen() {
         <div className="w-[45%] h-full flex flex-col border-r border-[#E2DDD8] bg-[#F7F3EE]">
           <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
             
-            {/* AI Summary (Collapsed by default in consultation) */}
-            <details className="group">
-              <summary className="flex items-center justify-between p-4 bg-white border border-[#E2DDD8] rounded-2xl cursor-pointer hover:bg-[#FDFEFE] transition-all">
-                <div className="flex items-center gap-2 text-[#1B6CA8] font-bold">
-                  <Sparkles size={18} fill="#1B6CA8" />
-                  <span className="text-xs uppercase tracking-wider">AI Pre-Consultation Summary</span>
-                </div>
-                <Layout size={16} className="text-[#888] group-open:rotate-180 transition-transform" />
-              </summary>
-              <div className="mt-2 bg-white border border-[#E2DDD8] rounded-2xl p-6">
-                <p className="text-sm text-[#333] leading-relaxed">
-                   Loading summary... (Integrate AISummaryCard logic here if needed)
-                </p>
-              </div>
-            </details>
+            {/* AI Pre-Consultation Summary */}
+            <AISummaryCard
+              summary={summaryData?.summary ?? null}
+              timestamp={summaryData?.generated_at ? new Date(summaryData.generated_at).toLocaleTimeString() : null}
+              isLoading={summaryLoading}
+              onRefresh={() => refetchSummary()}
+            />
 
             {/* Symptoms / Chief Complaint */}
             <div className="space-y-3">
@@ -234,9 +237,66 @@ export default function ConsultationScreen() {
               )}
              {activeTab === 'history' && (
                <div className="h-full overflow-y-auto p-4 bg-[#F7F3EE]">
-                  <div className="bg-white rounded-2xl border border-[#E2DDD8] min-h-full">
-                    <p className="p-12 text-center text-[#888]">Viewing legacy records...</p>
-                  </div>
+                 {patientRecord?.consent_status !== 'granted' ? (
+                   <div className="bg-white rounded-2xl border border-[#E2DDD8] p-8 text-center">
+                     <FileText size={40} className="text-gray-300 mx-auto mb-3" />
+                     <p className="font-bold text-gray-600">Consent Required</p>
+                     <p className="text-gray-400 text-sm mt-1">Ask the patient to grant access via their Ayu Disha app to view full history.</p>
+                   </div>
+                 ) : patientRecord?.visits?.length === 0 ? (
+                   <div className="bg-white rounded-2xl border border-[#E2DDD8] p-8 text-center">
+                     <FileText size={40} className="text-gray-300 mx-auto mb-3" />
+                     <p className="text-gray-400 text-sm">No previous visits found in digital record.</p>
+                   </div>
+                 ) : (
+                   <div className="space-y-3">
+                     {(patientRecord?.visits || []).map((visit: any) => (
+                       <div key={visit._id} className="bg-white rounded-2xl border border-[#E2DDD8] p-5">
+                         <div className="flex items-start justify-between mb-2">
+                           <div className="flex items-center gap-2">
+                             <Hospital size={15} className="text-[#1B6CA8] shrink-0" />
+                             <span className="font-semibold text-gray-800 text-sm">
+                               {visit.hospital_name || visit.hospital_id || 'Unknown Hospital'}
+                             </span>
+                           </div>
+                           <span className="text-xs text-gray-400 flex items-center gap-1">
+                             <Calendar size={11} />
+                             {new Date(visit.date).toLocaleDateString('en-IN', { dateStyle: 'medium' })}
+                           </span>
+                         </div>
+                         <div className="flex items-center gap-1 text-xs text-gray-500 mb-2">
+                           <User size={11} />
+                           <span>{visit.doctor_name || 'Pending Assignment'}</span>
+                         </div>
+                         {visit.chief_complaint && (
+                           <p className="text-xs text-gray-600 mb-2 bg-gray-50 rounded-lg px-3 py-2">
+                             {visit.chief_complaint}
+                           </p>
+                         )}
+                         {visit.diagnosis?.length > 0 && (
+                           <div className="flex flex-wrap gap-1.5 mb-2">
+                             {visit.diagnosis.map((d: string, i: number) => (
+                               <span key={i} className="bg-blue-50 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">{d}</span>
+                             ))}
+                           </div>
+                         )}
+                         {visit.prescriptions?.length > 0 && (
+                           <div className="mt-2">
+                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Prescriptions</p>
+                             <div className="space-y-1">
+                               {visit.prescriptions.map((rx: any, i: number) => (
+                                 <div key={i} className="bg-purple-50 rounded-lg px-3 py-2 text-xs">
+                                   <span className="font-bold text-purple-800">{rx.medicine || rx.name}</span>
+                                   <span className="text-purple-500 ml-2">{rx.dosage} · {rx.frequency} · {rx.duration}</span>
+                                 </div>
+                               ))}
+                             </div>
+                           </div>
+                         )}
+                       </div>
+                     ))}
+                   </div>
+                 )}
                </div>
              )}
           </div>

@@ -55,9 +55,23 @@ async def get_patient_visits(current_user: UserResponse = Depends(get_current_us
     results = []
     for v in visits:
         v["_id"] = str(v["_id"])
-        # Ensure name fields are strings even if missing in DB
-        v["hospital_name"] = v.get("hospital_name", "Unknown Hospital")
-        v["doctor_name"] = v.get("doctor_name", "Unknown Doctor")
+        # If hospital_name is missing, look it up from hospital_id
+        if not v.get("hospital_name") and v.get("hospital_id"):
+            hospital_doc = await db.hospitals.find_one({"name": v["hospital_id"]})
+            if hospital_doc:
+                v["hospital_name"] = hospital_doc.get("name", v["hospital_id"])
+            else:
+                v["hospital_name"] = v["hospital_id"]
+        elif not v.get("hospital_name"):
+            v["hospital_name"] = "Unknown Hospital"
+
+        # For self-referrals, show a meaningful label instead of blank
+        if not v.get("doctor_name"):
+            if v.get("appointment_type") == "referred" and v.get("referred_by") == "Self (AI Triage)":
+                v["doctor_name"] = "Pending Doctor Assignment"
+            else:
+                v["doctor_name"] = "Unknown Doctor"
+
         results.append(VisitResponse(**v))
         
     return results
@@ -288,6 +302,10 @@ async def log_symptoms(req: SymptomLogRequest, current_user: UserResponse = Depe
         
     # Auto-Refer
     if refer_to_doctor:
+        # Look up the hospital name from the hospitals collection
+        hospital_doc = await db.hospitals.find_one({"name": req.preferred_hospital_id})
+        hospital_name = hospital_doc.get("name", req.preferred_hospital_id) if hospital_doc else req.preferred_hospital_id
+
         ref_dict = {
             "patient_id": patient_id,
             "to_hospital_id": req.preferred_hospital_id,
@@ -305,6 +323,8 @@ async def log_symptoms(req: SymptomLogRequest, current_user: UserResponse = Depe
         await db.visits.insert_one({
             "patient_id": patient_id,
             "hospital_id": req.preferred_hospital_id,
+            "hospital_name": hospital_name,
+            "doctor_name": "Pending Assignment",
             "date": datetime.utcnow(),
             "created_at": datetime.utcnow(),
             "chief_complaint": f"Self Referral: {req.transcript[:100]}...",
