@@ -387,6 +387,170 @@ async def get_lab_notifications(current_user: UserResponse = Depends(get_current
     return results
 
 
+@router.get("/results/{lab_order_id}")
+async def get_lab_result(lab_order_id: str, current_user: UserResponse = Depends(get_current_user)):
+    """
+    Get a lab result with strict access control.
+    Only accessible to:
+    1. The patient (owner of the report)
+    2. The doctor that the patient is assigned to
+    3. Lab technician who uploaded it (for their hospital only)
+    """
+    db = get_database()
+    
+    lab_order = await db.lab_orders.find_one({"_id": safe_object_id(lab_order_id)})
+    if not lab_order:
+        raise HTTPException(status_code=404, detail="Lab result not found")
+    
+    patient_id = lab_order.get("patient_id")
+    patient = await db.patients.find_one({"_id": ObjectId(patient_id)}) if patient_id else None
+    
+    # Check access permissions
+    has_access = False
+    access_reason = None
+    
+    # 1. Check if current user is the patient
+    if patient and patient.get("user_id") == str(current_user.id):
+        has_access = True
+        access_reason = "patient"
+    
+    # 2. Check if current user is the assigned doctor
+    if current_user.role == "doctor" and patient:
+        # Get patient's assigned doctor from visits or consultations
+        recent_visit = await db.visits.find_one({
+            "patient_id": patient_id,
+            "doctor_id": str(current_user.id),
+            "status": {"$in": ["active", "completed"]}
+        }).sort("date", -1)
+        
+        if recent_visit:
+            has_access = True
+            access_reason = "assigned_doctor"
+    
+    # 3. Check if current user is the lab tech who uploaded it (same hospital)
+    if current_user.role == "lab":
+        if lab_order.get("hospital_id") == current_user.hospital:
+            has_access = True
+            access_reason = "lab_tech_same_hospital"
+    
+    if not has_access:
+        raise HTTPException(
+            status_code=403, 
+            detail="Access denied: You do not have permission to view this lab result. Only the patient and their assigned doctor can access this report."
+        )
+    
+    # Return sanitized result
+    return {
+        "id": str(lab_order["_id"]),
+        "patient_id": patient_id,
+        "patient_name": patient.get("name") if patient else "Unknown",
+        "test_name": lab_order.get("test_name"),
+        "result": lab_order.get("result"),
+        "result_notes": lab_order.get("result_notes"),
+        "result_date": lab_order.get("result_date"),
+        "resulted_by": lab_order.get("resulted_by"),
+        "pdf_url": lab_order.get("pdf_url"),
+        "ai_summary": lab_order.get("ai_summary"),
+        "ai_key_values": lab_order.get("ai_key_values"),
+        "ai_is_abnormal": lab_order.get("ai_is_abnormal"),
+        "ai_recommendation": lab_order.get("ai_recommendation"),
+        "status": lab_order.get("status"),
+        "access_reason": access_reason  # For debugging
+    }
+
+
+@router.get("/results")
+async def get_my_lab_results(current_user: UserResponse = Depends(get_current_user)):
+    """
+    Get all lab results accessible to current user.
+    For patients: their own results
+    For doctors: results of their assigned patients
+    For lab techs: results uploaded by their hospital
+    """
+    db = get_database()
+    
+    if current_user.role == "patient":
+        # Get patient record
+        patient = await db.patients.find_one({"user_id": str(current_user.id)})
+        if not patient:
+            return []
+        
+        # Get all lab orders for this patient
+        results = await db.lab_orders.find({
+            "patient_id": str(patient["_id"]),
+            "status": "resulted"
+        }).sort("result_date", -1).to_list(100)
+        
+        # Return sanitized results
+        return [
+            {
+                "id": str(r["_id"]),
+                "test_name": r.get("test_name"),
+                "result_date": r.get("result_date"),
+                "ai_summary": r.get("ai_summary"),
+                "ai_is_abnormal": r.get("ai_is_abnormal"),
+                "status": r.get("status")
+            }
+            for r in results
+        ]
+    
+    elif current_user.role == "doctor":
+        # Get all patients this doctor has visited
+        visits = await db.visits.find({
+            "doctor_id": str(current_user.id),
+            "status": {"$in": ["active", "completed"]}
+        }).to_list(1000)
+        
+        patient_ids = list(set([v.get("patient_id") for v in visits if v.get("patient_id")]))
+        
+        if not patient_ids:
+            return []
+        
+        # Get lab orders for these patients
+        results = await db.lab_orders.find({
+            "patient_id": {"$in": patient_ids},
+            "status": "resulted"
+        }).sort("result_date", -1).to_list(100)
+        
+        # Return results with patient names
+        response = []
+        for r in results:
+            patient = await db.patients.find_one({"_id": ObjectId(r.get("patient_id"))})
+            response.append({
+                "id": str(r["_id"]),
+                "patient_name": patient.get("name") if patient else "Unknown",
+                "test_name": r.get("test_name"),
+                "result_date": r.get("result_date"),
+                "ai_summary": r.get("ai_summary"),
+                "ai_is_abnormal": r.get("ai_is_abnormal"),
+                "status": r.get("status")
+            })
+        
+        return response
+    
+    elif current_user.role == "lab":
+        # Get all lab orders for this lab's hospital
+        results = await db.lab_orders.find({
+            "hospital_id": current_user.hospital,
+            "status": "resulted"
+        }).sort("result_date", -1).to_list(100)
+        
+        response = []
+        for r in results:
+            patient = await db.patients.find_one({"_id": ObjectId(r.get("patient_id"))})
+            response.append({
+                "id": str(r["_id"]),
+                "patient_name": patient.get("name") if patient else "Unknown",
+                "test_name": r.get("test_name"),
+                "result_date": r.get("result_date"),
+                "status": r.get("status")
+            })
+        
+        return response
+    
+    return []
+
+
 @router.patch("/notifications/{notif_id}/read")
 async def mark_notification_read(notif_id: str, current_user: UserResponse = Depends(get_current_user)):
     """Marks a notification as read."""
