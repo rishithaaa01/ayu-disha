@@ -1011,3 +1011,185 @@ async def get_differential(symptoms: str, patient_id: str, current_user: UserRes
     except Exception as e:
         print(f"Differential Error: {e}")
         return {"diagnoses": []}
+
+
+# --- DOCTOR PATIENT LIST ENDPOINTS ---
+
+@router.get("/my-patients")
+async def get_my_patients(current_user: UserResponse = Depends(require_role("doctor"))):
+    """
+    Returns all patients managed by this doctor (from completed visits and active consultations).
+    """
+    if not current_user.hospital:
+        raise HTTPException(status_code=403, detail="Doctor is not assigned to any hospital")
+        
+    db = get_database()
+    
+    # Find all visits where this doctor is listed (completed, active, or in queue)
+    visits_cursor = db.visits.find({
+        "hospital_id": current_user.hospital,
+        "doctor_id": str(current_user.id)
+    }).sort("date", -1)
+    
+    visits = await visits_cursor.to_list(500)
+    
+    # Group by patient_id to get unique patients
+    patient_ids = list(set([v.get("patient_id") for v in visits if v.get("patient_id")]))
+    
+    patients = []
+    for patient_id in patient_ids:
+        patient = await db.patients.find_one({"_id": safe_object_id(patient_id)})
+        if not patient:
+            continue
+            
+        # Get patient's visits with this doctor
+        patient_visits = [v for v in visits if v.get("patient_id") == patient_id]
+        patient_visits.sort(key=lambda x: x.get("date", datetime.utcnow()), reverse=True)
+        
+        # Calculate age
+        dob = patient.get("date_of_birth", "2000-01-01")
+        try:
+            birth_year = int(dob.split("-")[0])
+            age = datetime.utcnow().year - birth_year
+        except:
+            age = 0
+        
+        # Get risk level from most recent visit
+        risk_level = "low"
+        if patient_visits and patient_visits[0].get("risk_tag"):
+            risk_map = {"urgent": "high", "watch": "medium", "low": "low"}
+            risk_level = risk_map.get(patient_visits[0]["risk_tag"], "low")
+        
+        # Get diagnoses and conditions
+        chronic_conditions = []
+        last_diagnosis = None
+        for v in patient_visits[:5]:  # Check last 5 visits
+            if v.get("diagnosis"):
+                last_diagnosis = v["diagnosis"][0] if isinstance(v["diagnosis"], list) else v["diagnosis"]
+                chronic_conditions.extend(v.get("diagnosis", []))
+        
+        # Deduplicate conditions
+        chronic_conditions = list(set(chronic_conditions))[:5]
+        
+        # Get last visit date
+        last_visit_date = None
+        if patient_visits:
+            last_visit_date = patient_visits[0].get("date") or patient_visits[0].get("created_at")
+        
+        patients.append({
+            "patient_id": str(patient["_id"]),
+            "name": patient["name"],
+            "age": age,
+            "gender": patient.get("gender"),
+            "mobile": patient.get("mobile"),
+            "village": patient.get("village"),
+            "district": patient.get("district"),
+            "last_visit_date": last_visit_date.isoformat() if last_visit_date else None,
+            "last_diagnosis": last_diagnosis,
+            "chronic_conditions": chronic_conditions,
+            "risk_level": risk_level,
+            "total_visits": len(patient_visits)
+        })
+    
+    return patients
+
+@router.get("/referrals")
+async def get_referrals(current_user: UserResponse = Depends(require_role("doctor"))):
+    """
+    Returns all referrals (incoming and outgoing) for this doctor.
+    """
+    if not current_user.hospital:
+        raise HTTPException(status_code=403, detail="Doctor is not assigned to any hospital")
+        
+    db = get_database()
+    
+    # Get incoming referrals (to this doctor's hospital)
+    incoming_cursor = db.referrals.find({
+        "to_hospital_id": current_user.hospital,
+        "status": {"$in": ["pending", "accepted", "rejected", "seen", "completed"]}
+    }).sort("created_date", -1)
+    
+    incoming_refs = await incoming_cursor.to_list(500)
+    
+    # Get outgoing referrals (from this doctor)
+    outgoing_cursor = db.referrals.find({
+        "from_doctor_id": str(current_user.id),
+        "status": {"$in": ["pending", "accepted", "rejected", "seen", "completed"]}
+    }).sort("created_date", -1)
+    
+    outgoing_refs = await outgoing_cursor.to_list(500)
+    
+    referrals = []
+    
+    # Process incoming
+    for ref in incoming_refs:
+        patient = await db.patients.find_one({"_id": safe_object_id(ref.get("patient_id"))})
+        asha = await db.users.find_one({"_id": safe_object_id(ref.get("from_worker_id"))}) if ref.get("from_worker_id") else None
+        
+        if not patient:
+            continue
+            
+        dob = patient.get("date_of_birth", "2000-01-01")
+        try:
+            birth_year = int(dob.split("-")[0])
+            age = datetime.utcnow().year - birth_year
+        except:
+            age = 0
+            
+        referrals.append({
+            "id": str(ref["_id"]),
+            "patient_id": str(patient["_id"]),
+            "patient_name": patient["name"],
+            "patient_age": age,
+            "patient_gender": patient.get("gender"),
+            "patient_mobile": patient.get("mobile"),
+            "type": "incoming",
+            "from_doctor": None,
+            "from_facility": None,
+            "to_doctor": current_user.name,
+            "to_facility": current_user.hospital,
+            "reason": ref.get("reason", ""),
+            "notes": ref.get("asha_observations", ""),
+            "urgency": ref.get("urgency", "routine"),
+            "status": ref.get("status", "pending"),
+            "created_date": ref.get("created_date", datetime.utcnow()).isoformat() if ref.get("created_date") else datetime.utcnow().isoformat(),
+            "updated_date": ref.get("updated_date"),
+            "asha_name": asha["name"] if asha else None
+        })
+    
+    # Process outgoing
+    for ref in outgoing_refs:
+        patient = await db.patients.find_one({"_id": safe_object_id(ref.get("patient_id"))})
+        
+        if not patient:
+            continue
+            
+        dob = patient.get("date_of_birth", "2000-01-01")
+        try:
+            birth_year = int(dob.split("-")[0])
+            age = datetime.utcnow().year - birth_year
+        except:
+            age = 0
+            
+        referrals.append({
+            "id": str(ref["_id"]),
+            "patient_id": str(patient["_id"]),
+            "patient_name": patient["name"],
+            "patient_age": age,
+            "patient_gender": patient.get("gender"),
+            "patient_mobile": patient.get("mobile"),
+            "type": "outgoing",
+            "from_doctor": current_user.name,
+            "from_facility": current_user.hospital,
+            "to_doctor": ref.get("to_doctor_name"),
+            "to_facility": ref.get("to_hospital_name"),
+            "reason": ref.get("reason", ""),
+            "notes": ref.get("notes", ""),
+            "urgency": ref.get("urgency", "routine"),
+            "status": ref.get("status", "pending"),
+            "created_date": ref.get("created_date", datetime.utcnow()).isoformat() if ref.get("created_date") else datetime.utcnow().isoformat(),
+            "updated_date": ref.get("updated_date"),
+            "asha_name": None
+        })
+    
+    return referrals
