@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from database import connect_to_mongo, close_mongo_connection, get_database
-from routes import auth, patients, asha, voice, clinician, admin, pho
+from routes import auth, patients, asha, voice, clinician, admin, pho, lab
 from jobs.reminder_job import start_scheduler
 from contextlib import asynccontextmanager
 from config import settings
@@ -65,6 +65,7 @@ app.include_router(voice.router,     prefix="/api/voice",    tags=["voice"])
 app.include_router(clinician.router, prefix="/api/clinician",tags=["clinician"])
 app.include_router(admin.router,     prefix="/api/admin",    tags=["admin"])
 app.include_router(pho.router,       prefix="/api/pho",      tags=["pho"])
+app.include_router(lab.router,       prefix="/api/lab",      tags=["lab"])
 
 @app.get("/")
 async def root():

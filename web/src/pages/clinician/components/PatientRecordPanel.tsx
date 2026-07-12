@@ -202,31 +202,108 @@ export default function PatientRecordPanel({ patientId, initialData }: PatientRe
           )}
 
           {activeTab === 'labs' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-4">
               {record.lab_results?.length > 0 ? (
                 record.lab_results.map((lab: any) => (
-                  <div key={lab.id} className="bg-white border border-[#E2DDD8] rounded-xl p-5 hover:shadow-sm transition-all">
+                  <div key={lab._id || lab.id} className={`bg-white border rounded-2xl p-5 hover:shadow-sm transition-all ${
+                    lab.ai_is_abnormal ? 'border-red-200' :
+                    lab.status === 'resulted' ? 'border-green-200' : 'border-[#E2DDD8]'
+                  }`}>
                     <div className="flex justify-between items-start mb-3">
                       <div>
-                        <h6 className="font-bold text-[#333]">{lab.test_name}</h6>
-                        <p className="text-[10px] text-[#888] uppercase mt-0.5">{format(new Date(lab.ordered_date), 'dd MMM yyyy')}</p>
+                        <div className="flex items-center gap-2">
+                          <h6 className="font-bold text-[#333]">{lab.test_name}</h6>
+                          {lab.ai_is_abnormal && (
+                            <span className="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase flex items-center gap-1">
+                              <AlertTriangle size={9} /> Abnormal
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-[#888] uppercase mt-0.5">
+                          {format(new Date(lab.ordered_date), 'dd MMM yyyy')} · {lab.ordered_by}
+                        </p>
                       </div>
-                      <span className={`
-                        px-2 py-0.5 rounded text-[10px] font-bold uppercase
-                        ${lab.status === 'resulted' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}
-                      `}>
-                        {lab.status}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {lab.pdf_url && (
+                          <a
+                            href={lab.pdf_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-xs text-blue-600 font-semibold bg-blue-50 px-2.5 py-1 rounded-lg hover:bg-blue-100 transition-colors"
+                          >
+                            <span>PDF</span>
+                          </a>
+                        )}
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                          lab.status === 'resulted' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                        }`}>
+                          {lab.status}
+                        </span>
+                      </div>
                     </div>
-                    
-                    <div className="bg-[#F7F3EE] p-3 rounded-lg mt-2">
-                       <p className="text-xs font-bold text-[#1B6CA8]">{lab.result || 'Processing...'}</p>
-                       <p className="text-[10px] text-[#888] mt-1 italic">Ordered by {lab.ordered_by}</p>
-                    </div>
+
+                    {lab.result && (
+                      <div className="bg-[#F7F3EE] p-3 rounded-lg mb-3">
+                        <p className="text-sm font-bold text-[#1B6CA8]">{lab.result}</p>
+                        {lab.result_date && (
+                          <p className="text-[10px] text-[#888] mt-0.5">
+                            Reported: {format(new Date(lab.result_date), 'dd MMM yyyy')}
+                            {lab.resulted_by && ` · by ${lab.resulted_by}`}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {!lab.result && (
+                      <div className="bg-amber-50 rounded-lg px-3 py-2 mb-3">
+                        <p className="text-xs text-amber-700 font-semibold">Processing — awaiting lab result</p>
+                      </div>
+                    )}
+
+                    {lab.ai_summary && (
+                      <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 mb-3">
+                        <p className="text-[10px] font-bold text-blue-700 uppercase tracking-wider mb-1">AI Summary</p>
+                        <p className="text-xs text-gray-700 leading-relaxed">{lab.ai_summary}</p>
+                        {lab.ai_recommendation && (
+                          <p className="text-xs text-blue-700 font-semibold mt-1">→ {lab.ai_recommendation}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {lab.ai_key_values?.length > 0 && (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-gray-400 uppercase tracking-wider text-[10px] border-b border-gray-100">
+                              <th className="text-left py-1.5 pr-3">Parameter</th>
+                              <th className="text-left py-1.5 pr-3">Value</th>
+                              <th className="text-left py-1.5 pr-3">Reference</th>
+                              <th className="text-left py-1.5">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-50">
+                            {lab.ai_key_values.map((kv: any, idx: number) => (
+                              <tr key={idx}>
+                                <td className="py-1.5 pr-3 font-medium text-gray-700">{kv.parameter}</td>
+                                <td className="py-1.5 pr-3 font-bold text-gray-800">{kv.value}</td>
+                                <td className="py-1.5 pr-3 text-gray-500">{kv.reference_range}</td>
+                                <td className="py-1.5">
+                                  <span className={`px-1.5 py-0.5 rounded-full font-bold uppercase text-[10px] ${
+                                    kv.status === 'normal' ? 'bg-green-100 text-green-700' :
+                                    kv.status === 'critical' ? 'bg-red-100 text-red-700' :
+                                    'bg-amber-100 text-amber-700'
+                                  }`}>{kv.status}</span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 ))
               ) : (
-                <div className="col-span-2 text-center py-12 text-[#888]">No lab records available.</div>
+                <div className="text-center py-12 text-[#888]">No lab records available.</div>
               )}
             </div>
           )}

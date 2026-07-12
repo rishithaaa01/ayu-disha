@@ -10,6 +10,7 @@ import HealthRecords from './pages/patient/HealthRecords';
 import Medicines from './pages/patient/Medicines';
 import LabTests from './pages/patient/LabTests';
 import Consents from './pages/patient/Consents';
+import LabDashboard from './pages/lab/Dashboard';
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { isAuthenticated, user } = useAuthStore();
@@ -103,6 +104,16 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['asha']}>
               <AshaDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Lab Tech routes */}
+        <Route
+          path="/lab/*"
+          element={
+            <ProtectedRoute allowedRoles={['lab']}>
+              <LabDashboard />
             </ProtectedRoute>
           }
         />

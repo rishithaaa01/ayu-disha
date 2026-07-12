@@ -9,6 +9,7 @@ class UserRole(str, Enum):
     doctor = "doctor"
     admin = "admin"
     pho = "pho"
+    lab = "lab"
 
 class UserCreate(BaseModel):
     name: str

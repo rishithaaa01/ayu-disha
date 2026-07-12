@@ -11,7 +11,12 @@ class Settings(BaseSettings):
     firebase_credentials_path: str
     firebase_credentials_json: Optional[str] = None
     groq_api_key: str
-    
+
+    # Cloudinary (free tier — pdf storage)
+    cloudinary_cloud_name: Optional[str] = None
+    cloudinary_api_key: Optional[str] = None
+    cloudinary_api_secret: Optional[str] = None
+
     # Optional SMS Gateway configurations
     twilio_account_sid: Optional[str] = None
     twilio_auth_token: Optional[str] = None

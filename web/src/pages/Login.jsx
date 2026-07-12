@@ -5,7 +5,7 @@ import { useAuthStore } from '../store/authStore';
 import { 
   ShieldCheck, UserCircle, Activity, Map, Home, 
   Shield, Sparkles, ChevronLeft, ArrowRight, User, Plus,
-  Phone, Lock, RefreshCw, CheckCircle2, Languages, MapPin, Mail, Key
+  Phone, Lock, RefreshCw, CheckCircle2, Languages, MapPin, Mail, Key, FlaskConical
 } from 'lucide-react';
 // Authentication is purely JWT-based — no Firebase dependency
 
@@ -143,10 +143,12 @@ export default function Login() {
       case 'pho':
         navigate('/pho');
         break;
+      case 'lab':
+        navigate('/lab');
+        break;
       default:
         navigate('/clinician');
-    }
-  };
+    }  };
 
   // Credentials Log In
   const handleCredentialsLogin = async (e) => {
@@ -378,6 +380,7 @@ export default function Login() {
     { id: 'asha', name: 'ASHA', desc: 'Perform field visits, log surveys & track community vitals', icon: Home, color: 'text-blue-600 bg-blue-50 border-blue-200' },
     { id: 'pho', name: 'PHO', desc: 'Monitor community disease dashboards & spatial heatmaps', icon: Map, color: 'text-purple-600 bg-purple-50 border-purple-200' },
     { id: 'admin', name: 'Admin', desc: 'Configure hospital databases, clinician profiles & access logs', icon: Shield, color: 'text-red-600 bg-red-50 border-red-200' },
+    { id: 'lab', name: 'Lab Tech', desc: 'Upload lab results, manage pending orders & generate AI reports', icon: FlaskConical, color: 'text-teal-600 bg-teal-50 border-teal-200' },
   ];
 
   return (
