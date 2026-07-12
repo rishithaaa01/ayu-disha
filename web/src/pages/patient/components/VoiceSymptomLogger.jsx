@@ -29,17 +29,34 @@ export default function VoiceSymptomLogger({ onClose, onLogSuccess }) {
   useEffect(() => {
     const checkAndSyncOfflineData = async () => {
       const offlineAudio = localStorage.getItem(`offline_symptom_audio_temp`);
+      const offlineTimestamp = localStorage.getItem(`offline_symptom_timestamp`);
+      
       if (!offlineAudio) return;
+
+      // If offline data is older than 24 hours, clear it automatically
+      if (offlineTimestamp) {
+        const savedTime = parseInt(offlineTimestamp, 10);
+        const now = Date.now();
+        const ageInHours = (now - savedTime) / (1000 * 60 * 60);
+        
+        if (ageInHours > 24) {
+          console.log('Clearing stale offline data (older than 24 hours)');
+          localStorage.removeItem(`offline_symptom_audio_temp`);
+          localStorage.removeItem(`offline_symptom_timestamp`);
+          return;
+        }
+      }
 
       // Check if user is online
       if (!navigator.onLine) {
-        toast('You have an offline voice note waiting to sync when online.', { icon: '🔄' });
+        toast('Offline mode: Your voice note will sync when connection returns.', { icon: '📡' });
         return;
       }
 
-      // Try to sync the offline data
+      // User is online - try to sync the offline data
       try {
-        toast.loading('Syncing offline voice note...');
+        console.log('Attempting to sync offline voice note...');
+        const toastId = toast.loading('Syncing offline voice note...');
         const base64Data = offlineAudio;
         
         // Convert base64 to blob
@@ -59,13 +76,15 @@ export default function VoiceSymptomLogger({ onClose, onLogSuccess }) {
         await api.post('/voice/transcribe', formData);
         
         localStorage.removeItem(`offline_symptom_audio_temp`);
-        toast.success('Offline voice note synced successfully!');
+        localStorage.removeItem(`offline_symptom_timestamp`);
+        toast.success('Offline voice note synced successfully!', { id: toastId });
       } catch (err) {
         console.error('Failed to sync offline audio:', err);
-        // Don't show error toast - just keep it offline for later
+        // Keep it offline for retry - don't show error toast to avoid spam
       }
     };
 
+    // Check on component mount
     checkAndSyncOfflineData();
 
     // Also listen for online event
@@ -98,14 +117,16 @@ export default function VoiceSymptomLogger({ onClose, onLogSuccess }) {
       
       setResult(symptomRes.data);
       localStorage.removeItem(`offline_symptom_audio_temp`); // clear any offline cache
+      localStorage.removeItem(`offline_symptom_timestamp`);
       if(onLogSuccess) onLogSuccess(symptomRes.data);
     } catch (err) {
       console.warn("Offline! Storing symptom voice note locally.", err);
-      // Fallback: Save as Base64 in local storage
+      // Fallback: Save as Base64 in local storage with timestamp
       const reader = new FileReader();
       reader.readAsDataURL(audioBlob);
       reader.onloadend = () => {
         localStorage.setItem(`offline_symptom_audio_temp`, reader.result);
+        localStorage.setItem(`offline_symptom_timestamp`, Date.now().toString());
         setResult({
           risk_level: 'WATCH',
           reasoning: 'Offline mode active. Symptom voice note saved locally. Will sync when online.',
