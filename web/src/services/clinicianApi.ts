@@ -43,6 +43,20 @@ export const api = {
   },
   orderLabs: (data: any) => clinicianApi.post('/lab-orders', data).then(res => res.data),
   sendReferral: (data: any) => clinicianApi.post('/referrals', data).then(res => res.data),
+  
+  // Lab Results (secure - doctor can only see their assigned patients' results)
+  getMyLabResults: () => {
+    // Route to /lab/results which checks doctor's permission
+    const labApi = axios.create({
+      baseURL: import.meta.env.VITE_API_URL || 'https://ayu-disha.onrender.com/api',
+      timeout: 15000,
+    });
+    const token = localStorage.getItem('token');
+    if (token) {
+      labApi.defaults.headers.common.Authorization = `Bearer ${token}`;
+    }
+    return labApi.get('/lab/results').then(res => res.data);
+  },
 };
 
 export default api;
