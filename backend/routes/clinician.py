@@ -70,7 +70,8 @@ class PrescriptionInteractionRequest(BaseModel):
     patient_allergies: List[str]
 
 class MedicineItem(BaseModel):
-    name: str
+    name: str = ""        # legacy field
+    medicine: str = ""    # preferred field — patient side reads this
     dosage: str
     frequency: str
     duration: str
@@ -209,7 +210,9 @@ async def add_to_queue(data: VisitCreate, current_user: UserResponse = Depends(r
     visit_doc = {
         "patient_id": data.patient_id,
         "hospital_id": current_user.hospital,
+        "hospital_name": current_user.hospital,
         "doctor_id": str(current_user.id) if current_user.role == "doctor" else None,
+        "doctor_name": current_user.name if current_user.role == "doctor" else "Pending Assignment",
         "date": datetime.utcnow(),
         "created_at": datetime.utcnow(),
         "chief_complaint": data.chief_complaint,
@@ -450,7 +453,9 @@ async def start_visit(data: VisitCreate, current_user: UserResponse = Depends(re
     visit_doc = {
         "patient_id": data.patient_id,
         "hospital_id": current_user.hospital,
+        "hospital_name": current_user.hospital,
         "doctor_id": str(current_user.id),
+        "doctor_name": current_user.name,
         "date": datetime.utcnow(),
         "chief_complaint": data.chief_complaint,
         "status": "active",
@@ -518,10 +523,16 @@ async def complete_visit(visit_id: str, current_user: UserResponse = Depends(req
     if not visit:
         raise HTTPException(status_code=404, detail="Visit not found or access denied")
         
-    # Update visit status
+    # Update visit status and stamp doctor/hospital
     await db.visits.update_one(
         {"_id": safe_object_id(visit_id), "hospital_id": current_user.hospital},
-        {"$set": {"status": "completed"}}
+        {"$set": {
+            "status": "completed",
+            "doctor_id": str(current_user.id),
+            "doctor_name": current_user.name,
+            "hospital_name": current_user.hospital,
+            "completed_at": datetime.utcnow()
+        }}
     )
     
     # If a referral was linked, update it to 'seen' with outcomes
@@ -649,10 +660,19 @@ async def save_prescription(data: PrescriptionSaveRequest, current_user: UserRes
     if visit.get("patient_id") != data.patient_id:
         raise HTTPException(status_code=400, detail="Invalid patient association for this visit")
         
+    # Normalize medicine items — store both `name` and `medicine` for compatibility
+    normalized = []
+    for m in data.medicines:
+        d = m.dict()
+        medicine_name = d.get("medicine") or d.get("name") or ""
+        d["medicine"] = medicine_name
+        d["name"] = medicine_name
+        normalized.append(d)
+
     # Update visit
     await db.visits.update_one(
         {"_id": safe_object_id(data.visit_id), "hospital_id": current_user.hospital},
-        {"$set": {"prescriptions": [m.dict() for m in data.medicines]}}
+        {"$set": {"prescriptions": normalized}}
     )
     
     return {"status": "success", "message": "Prescription saved and patient notified."}

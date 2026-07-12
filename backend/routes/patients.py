@@ -65,7 +65,15 @@ async def get_patient_visits(current_user: UserResponse = Depends(get_current_us
         elif not v.get("hospital_name"):
             v["hospital_name"] = "Unknown Hospital"
 
-        # For self-referrals, show a meaningful label instead of blank
+        # If doctor_name is missing or still pending, look up from doctor_id
+        if (not v.get("doctor_name") or v.get("doctor_name") == "Pending Assignment") and v.get("doctor_id"):
+            try:
+                doctor_doc = await db.users.find_one({"_id": ObjectId(v["doctor_id"])})
+                if doctor_doc:
+                    v["doctor_name"] = doctor_doc.get("name", "Unknown Doctor")
+            except Exception:
+                pass
+
         if not v.get("doctor_name"):
             if v.get("appointment_type") == "referred" and v.get("referred_by") == "Self (AI Triage)":
                 v["doctor_name"] = "Pending Doctor Assignment"

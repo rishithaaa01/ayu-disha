@@ -37,24 +37,51 @@ export default function Medicines() {
                     <Pill size={20} className="text-purple-600" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="font-bold text-gray-800">{rx.medicine}</h3>
-                    <div className="flex flex-wrap gap-3 mt-2">
-                      <span className="flex items-center space-x-1 text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded-lg">
-                        <Clock size={12} />
-                        <span>{rx.frequency}</span>
-                      </span>
-                      <span className="flex items-center space-x-1 text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded-lg">
-                        <span>💊</span>
-                        <span>{rx.dosage}</span>
-                      </span>
-                      <span className="flex items-center space-x-1 text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded-lg">
-                        <Calendar size={12} />
-                        <span>{rx.duration}</span>
-                      </span>
+                    <h3 className="font-bold text-gray-800 text-base">
+                      {rx.medicine || rx.name || 'Unknown Medicine'}
+                    </h3>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {rx.frequency && (
+                        <span className="flex items-center gap-1 text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded-lg">
+                          <Clock size={12} />
+                          {rx.frequency}
+                        </span>
+                      )}
+                      {rx.dosage && (
+                        <span className="flex items-center gap-1 text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded-lg">
+                          <span>💊</span>
+                          {rx.dosage}
+                        </span>
+                      )}
+                      {rx.duration && (
+                        <span className="flex items-center gap-1 text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded-lg">
+                          <Calendar size={12} />
+                          {rx.duration}
+                        </span>
+                      )}
                     </div>
-                    {rx.visit_date && (
-                      <p className="text-xs text-gray-400 mt-2">Prescribed: {new Date(rx.visit_date).toLocaleDateString('en-IN')}</p>
+                    {rx.instructions && (
+                      <p className="text-xs text-blue-600 mt-2 bg-blue-50 px-3 py-1.5 rounded-lg">
+                        📋 {rx.instructions}
+                      </p>
                     )}
+                    <div className="flex items-center gap-3 mt-2 pt-2 border-t border-gray-50">
+                      {rx.prescribed_by && (
+                        <p className="text-xs text-gray-400">
+                          By: <span className="font-medium text-gray-600">{rx.prescribed_by}</span>
+                        </p>
+                      )}
+                      {rx.hospital_name && (
+                        <p className="text-xs text-gray-400">
+                          At: <span className="font-medium text-gray-600">{rx.hospital_name}</span>
+                        </p>
+                      )}
+                      {rx.prescribed_date && (
+                        <p className="text-xs text-gray-400 ml-auto">
+                          {new Date(rx.prescribed_date).toLocaleDateString('en-IN', { dateStyle: 'medium' })}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
