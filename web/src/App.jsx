@@ -40,12 +40,13 @@ function ProtectedRoute({ children, allowedRoles }) {
 function App() {
   console.log('🚀 App component rendering');
   
-  return (
-    <ErrorBoundary>
-      <HashRouter>
-        <Routes>
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="/login" element={<Login />} />
+  try {
+    return (
+      <ErrorBoundary>
+        <HashRouter>
+          <Routes>
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/login" element={<Login />} />
 
         {/* Clinician / Doctor routes */}
         <Route
@@ -153,6 +154,15 @@ function App() {
     </HashRouter>
     </ErrorBoundary>
   );
+  } catch (error) {
+    console.error('❌ Critical error in App:', error);
+    return (
+      <div style={{ padding: '20px', background: '#fee', color: '#c00' }}>
+        <h1>Critical Error</h1>
+        <pre>{error.toString()}</pre>
+      </div>
+    );
+  }
 }
 
 export default App;

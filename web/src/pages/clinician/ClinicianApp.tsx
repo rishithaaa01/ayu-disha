@@ -4,6 +4,8 @@ import Sidebar from './components/Sidebar';
 import QueueScreen from './QueueScreen';
 import ConsultationScreen from './ConsultationScreen';
 import SettingsScreen from './SettingsScreen';
+import PatientsScreen from './PatientsScreen';
+import ReferralsScreen from './ReferralsScreen';
 import { useAuthStore } from '../../store/authStore';
 import { useClinicianStore } from '../../store/clinicianStore';
 import { Bell, Calendar } from 'lucide-react';
@@ -46,10 +48,12 @@ export default function ClinicianApp() {
         <div className="flex-1 overflow-auto p-8">
           <Routes>
             <Route path="queue" element={<QueueScreen />} />
+            <Route path="patients" element={<PatientsScreen />} />
+            <Route path="referrals" element={<ReferralsScreen />} />
             <Route path="consultation/:visitId" element={<ConsultationScreen />} />
             <Route path="settings" element={<SettingsScreen />} />
-            {/* We will add more routes as we build screens */}
             <Route path="/" element={<Navigate to="queue" replace />} />
+            <Route path="*" element={<Navigate to="queue" replace />} />
           </Routes>
         </div>
       </main>
