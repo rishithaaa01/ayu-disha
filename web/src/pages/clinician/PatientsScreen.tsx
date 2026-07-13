@@ -43,18 +43,34 @@ export default function PatientsScreen() {
     queryKey: ['doctorPatients'],
     queryFn: async () => {
       try {
-        console.log('[DEBUG] Fetching my-patients...');
-        const response = await api.get('/clinician/my-patients', true); // Cache bust
-        console.log('[DEBUG] Patients API response:', response);
-        console.log('[DEBUG] Response data:', response.data);
-        console.log('[DEBUG] Response type:', typeof response);
+        console.log('[DEBUG] Fetching my-patients with direct axios...');
+        
+        // Use direct axios call as fallback
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://ayu-disha.onrender.com/api'}/clinician/my-patients`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        console.log('[DEBUG] Response status:', response.status);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        console.log('[DEBUG] Patients API response:', data);
+        console.log('[DEBUG] Response data:', data);
+        console.log('[DEBUG] Response type:', typeof data);
         
         // Handle both response.data and direct response formats
-        const data = response.data || response || [];
-        console.log('[DEBUG] Final data to process:', data);
+        const finalData = Array.isArray(data) ? data : (data.data || data || []);
+        console.log('[DEBUG] Final data to process:', finalData);
         
         // Sort by last visit date descending (most recent first)
-        const sorted = (data || []).sort((a: any, b: any) => {
+        const sorted = (finalData || []).sort((a: any, b: any) => {
           const dateA = a.last_visit_date ? new Date(a.last_visit_date).getTime() : 0;
           const dateB = b.last_visit_date ? new Date(b.last_visit_date).getTime() : 0;
           return dateB - dateA; // Newest first
