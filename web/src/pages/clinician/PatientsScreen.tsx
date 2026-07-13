@@ -38,21 +38,31 @@ export default function PatientsScreen() {
   const [filterRisk, setFilterRisk] = useState<string>('all');
 
   // Fetch doctor's patients
-  const { data: patients = [], isLoading, refetch } = useQuery({
+  const { data: patients = [], isLoading, refetch, error } = useQuery({
     queryKey: ['doctorPatients'],
     queryFn: async () => {
       try {
+        console.log('[DEBUG] Fetching my-patients...');
         const response = await api.get('/clinician/my-patients');
-        console.log('Patients fetched:', response.data);
+        console.log('[DEBUG] Patients API response:', response);
+        console.log('[DEBUG] Response data:', response.data);
+        console.log('[DEBUG] Response type:', typeof response);
+        
+        // Handle both response.data and direct response formats
+        const data = response.data || response || [];
+        console.log('[DEBUG] Final data to process:', data);
+        
         // Sort by last visit date descending (most recent first)
-        const sorted = (response.data || []).sort((a: any, b: any) => {
+        const sorted = (data || []).sort((a: any, b: any) => {
           const dateA = a.last_visit_date ? new Date(a.last_visit_date).getTime() : 0;
           const dateB = b.last_visit_date ? new Date(b.last_visit_date).getTime() : 0;
           return dateB - dateA; // Newest first
         });
+        console.log('[DEBUG] Sorted patients:', sorted);
         return sorted;
       } catch (error) {
-        console.error('Failed to fetch patients:', error);
+        console.error('[DEBUG] Failed to fetch patients:', error);
+        console.error('[DEBUG] Error details:', error.response || error.message);
         return [];
       }
     },
@@ -61,6 +71,10 @@ export default function PatientsScreen() {
     refetchOnMount: 'stale',
     staleTime: 5000, // Data is stale after 5 seconds
   });
+
+  console.log('[DEBUG] PatientsScreen - patients data:', patients);
+  console.log('[DEBUG] PatientsScreen - isLoading:', isLoading);
+  console.log('[DEBUG] PatientsScreen - error:', error);
 
   // Filter patients
   const filteredPatients = patients.filter((patient: Patient) => {
