@@ -5,4 +5,14 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   base: '/ayu-disha/',
+  build: {
+    // Force new file names on each build to break cache
+    rollupOptions: {
+      output: {
+        entryFileNames: `[name]-[hash]-${Date.now()}.js`,
+        chunkFileNames: `[name]-[hash]-${Date.now()}.js`,
+        assetFileNames: `[name]-[hash]-${Date.now()}.[ext]`
+      }
+    }
+  }
 })
