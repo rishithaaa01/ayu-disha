@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/clinicianApi';
 import { useClinicianStore } from '../../store/clinicianStore';
 import { useDifferential } from '../../hooks/useDifferential';
@@ -33,6 +33,7 @@ import toast from 'react-hot-toast';
 export default function ConsultationScreen() {
   const { visitId } = useParams<{ visitId: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { activePatient, setActiveVisitId } = useClinicianStore();
   
   // Form State
@@ -108,6 +109,11 @@ export default function ConsultationScreen() {
       });
       await api.completeVisit(visitId!);
       toast.success('Consultation completed and saved!');
+      
+      // Refetch My Patients and Referrals to update the counts
+      await queryClient.invalidateQueries({ queryKey: ['doctorPatients'] });
+      await queryClient.invalidateQueries({ queryKey: ['doctorReferrals'] });
+      
       setActiveVisitId(null);
       navigate('/clinician/queue');
     } catch (e) {

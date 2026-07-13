@@ -79,6 +79,8 @@ export default function ReferralsScreen() {
       // Explicitly refetch to update stats immediately
       refetch();
       queryClient.invalidateQueries({ queryKey: ['doctorReferrals'] });
+      // Also invalidate doctorPatients since accepting a referral adds a patient
+      queryClient.invalidateQueries({ queryKey: ['doctorPatients'] });
     },
     onError: () => {
       toast.error('Failed to accept referral');
