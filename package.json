@@ -2,8 +2,8 @@
   "name": "ayu-disha-root",
   "private": true,
   "scripts": {
-    "build": "cd web-next && npm install && npm run build",
-    "dev": "cd web-next && npm run dev",
-    "start": "cd web-next && npm run start"
+    "build": "cd web && npm install && npm run build",
+    "dev": "cd web && npm run dev",
+    "start": "cd web && npm run preview"
   }
 }
