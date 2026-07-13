@@ -50,25 +50,9 @@ export default function ReferralsScreen() {
     queryKey: ['doctorReferrals'],
     queryFn: async () => {
       try {
-        console.log('[DEBUG] Fetching referrals with direct fetch...');
-        
-        // Use direct fetch call as fallback
-        const token = localStorage.getItem('token');
-        const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://ayu-disha.onrender.com/api'}/clinician/referrals`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        console.log('[DEBUG] Referrals response status:', response.status);
-        
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        console.log('Referrals fetched:', data);
+        console.log('[EMERGENCY FIX] Fetching referrals...');
+        const data = await api.get('/referrals');
+        console.log('[EMERGENCY FIX] Referrals data:', data);
         
         // Handle array response directly
         const finalData = Array.isArray(data) ? data : (data.data || data || []);
@@ -81,7 +65,7 @@ export default function ReferralsScreen() {
         });
         return sorted;
       } catch (error) {
-        console.error('Failed to fetch referrals:', error);
+        console.error('[EMERGENCY FIX] Failed to fetch referrals:', error);
         return [];
       }
     },
@@ -93,22 +77,8 @@ export default function ReferralsScreen() {
 
   // Accept referral mutation
   const acceptMutation = useMutation({
-    mutationFn: async (referralId: string) => {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://ayu-disha.onrender.com/api'}/clinician/referrals/${referralId}/accept`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      return response.json();
-    },
+    mutationFn: (referralId: string) => 
+      api.post(`/referrals/${referralId}/accept`),
     onSuccess: () => {
       toast.success('Referral accepted successfully');
       // Explicitly refetch to update stats immediately
@@ -124,23 +94,8 @@ export default function ReferralsScreen() {
 
   // Reject referral mutation
   const rejectMutation = useMutation({
-    mutationFn: async ({ referralId, reason }: { referralId: string; reason: string }) => {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://ayu-disha.onrender.com/api'}/clinician/referrals/${referralId}/reject`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ reason })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      return response.json();
-    },
+    mutationFn: ({ referralId, reason }: { referralId: string; reason: string }) =>
+      api.post(`/referrals/${referralId}/reject`, { reason }),
     onSuccess: () => {
       toast.success('Referral rejected');
       // Explicitly refetch to update stats immediately

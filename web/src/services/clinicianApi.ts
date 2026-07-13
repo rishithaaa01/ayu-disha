@@ -1,5 +1,8 @@
 import axios from 'axios';
 
+// Force cache busting by adding timestamp
+const CACHE_BUST = `?v=${Date.now()}`;
+
 // This matches your backend URL. 
 const API_URL = `${import.meta.env.VITE_API_URL || 'https://ayu-disha.onrender.com/api'}/clinician`;
 
@@ -18,13 +21,47 @@ clinicianApi.interceptors.request.use((config) => {
   return config;
 });
 
-export const api = {
-  // Generic methods
-  get: (url: string, cacheBust = false) => {
-    const finalUrl = cacheBust ? `${url}?t=${Date.now()}` : url;
-    return clinicianApi.get(finalUrl).then(res => res.data);
+// EMERGENCY FIX: Create completely new API object that doesn't rely on cached imports
+const emergencyApi = {
+  get: async (endpoint: string) => {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`https://ayu-disha.onrender.com/api/clinician${endpoint}${CACHE_BUST}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    return response.json();
   },
-  post: (url: string, data?: any) => clinicianApi.post(url, data).then(res => res.data),
+  
+  post: async (endpoint: string, data?: any) => {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`https://ayu-disha.onrender.com/api/clinician${endpoint}${CACHE_BUST}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: data ? JSON.stringify(data) : undefined
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    return response.json();
+  }
+};
+
+export const api = {
+  // EMERGENCY: Use direct fetch calls to bypass caching
+  get: emergencyApi.get,
+  post: emergencyApi.post,
   
   // Queue & Patients
   getQueue: () => clinicianApi.get('/queue').then(res => res.data),

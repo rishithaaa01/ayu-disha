@@ -38,36 +38,17 @@ export default function PatientsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRisk, setFilterRisk] = useState<string>('all');
 
-  // Fetch doctor's patients
+  // Fetch doctor's patients  
   const { data: patients = [], isLoading, refetch, error } = useQuery({
     queryKey: ['doctorPatients'],
     queryFn: async () => {
       try {
-        console.log('[DEBUG] Fetching my-patients with direct axios...');
+        console.log('[EMERGENCY FIX] Fetching patients with emergency API...');
+        const data = await api.get('/my-patients');
+        console.log('[EMERGENCY FIX] Patients data:', data);
         
-        // Use direct axios call as fallback
-        const token = localStorage.getItem('token');
-        const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://ayu-disha.onrender.com/api'}/clinician/my-patients`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        console.log('[DEBUG] Response status:', response.status);
-        
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        console.log('[DEBUG] Patients API response:', data);
-        console.log('[DEBUG] Response data:', data);
-        console.log('[DEBUG] Response type:', typeof data);
-        
-        // Handle both response.data and direct response formats
+        // Handle array response directly
         const finalData = Array.isArray(data) ? data : (data.data || data || []);
-        console.log('[DEBUG] Final data to process:', finalData);
         
         // Sort by last visit date descending (most recent first)
         const sorted = (finalData || []).sort((a: any, b: any) => {
@@ -75,11 +56,10 @@ export default function PatientsScreen() {
           const dateB = b.last_visit_date ? new Date(b.last_visit_date).getTime() : 0;
           return dateB - dateA; // Newest first
         });
-        console.log('[DEBUG] Sorted patients:', sorted);
+        console.log('[EMERGENCY FIX] Sorted patients:', sorted);
         return sorted;
       } catch (error) {
-        console.error('[DEBUG] Failed to fetch patients:', error);
-        console.error('[DEBUG] Error details:', error.response || error.message);
+        console.error('[EMERGENCY FIX] Failed to fetch patients:', error);
         return [];
       }
     },
