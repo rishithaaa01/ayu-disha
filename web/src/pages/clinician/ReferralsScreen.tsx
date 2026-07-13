@@ -50,23 +50,25 @@ export default function ReferralsScreen() {
     queryKey: ['doctorReferrals'],
     queryFn: async () => {
       try {
-        console.log('[EMERGENCY FIX] Fetching referrals...');
-        const data = await api.get('/referrals');
-        console.log('[EMERGENCY FIX] Referrals data:', data);
+        console.log('[DEBUG] Fetching referrals...');
+        const data = await api.getReferrals();
+        console.log('[DEBUG] Referrals response:', data);
         
-        // Handle array response directly
-        const finalData = Array.isArray(data) ? data : (data.data || data || []);
+        // Ensure we have an array
+        const referralsArray = Array.isArray(data) ? data : [];
         
         // Sort by created_date descending (most recent first)
-        const sorted = (finalData || []).sort((a: any, b: any) => {
+        const sorted = referralsArray.sort((a: any, b: any) => {
           const dateA = new Date(a.created_date).getTime();
           const dateB = new Date(b.created_date).getTime();
           return dateB - dateA; // Newest first
         });
+        
+        console.log('[DEBUG] Final referrals data:', sorted.length, 'referrals');
         return sorted;
       } catch (error) {
-        console.error('[EMERGENCY FIX] Failed to fetch referrals:', error);
-        return [];
+        console.error('[ERROR] Failed to fetch referrals:', error);
+        throw error;
       }
     },
     refetchInterval: 10000, // Refetch every 10 seconds
@@ -77,8 +79,7 @@ export default function ReferralsScreen() {
 
   // Accept referral mutation
   const acceptMutation = useMutation({
-    mutationFn: (referralId: string) => 
-      api.post(`/referrals/${referralId}/accept`),
+    mutationFn: (referralId: string) => api.acceptReferral(referralId),
     onSuccess: () => {
       toast.success('Referral accepted successfully');
       // Explicitly refetch to update stats immediately
@@ -95,7 +96,7 @@ export default function ReferralsScreen() {
   // Reject referral mutation
   const rejectMutation = useMutation({
     mutationFn: ({ referralId, reason }: { referralId: string; reason: string }) =>
-      api.post(`/referrals/${referralId}/reject`, { reason }),
+      api.rejectReferral(referralId, reason),
     onSuccess: () => {
       toast.success('Referral rejected');
       // Explicitly refetch to update stats immediately

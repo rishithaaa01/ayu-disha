@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/clinicianApi';
-import DebugAPITest from '../../components/DebugAPITest';
 import { 
   Search, 
   Filter, 
@@ -38,29 +37,30 @@ export default function PatientsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRisk, setFilterRisk] = useState<string>('all');
 
-  // Fetch doctor's patients  
+  // Fetch doctor's patients
   const { data: patients = [], isLoading, refetch, error } = useQuery({
     queryKey: ['doctorPatients'],
     queryFn: async () => {
       try {
-        console.log('[EMERGENCY FIX] Fetching patients with emergency API...');
-        const data = await api.get('/my-patients');
-        console.log('[EMERGENCY FIX] Patients data:', data);
+        console.log('[DEBUG] Fetching my patients...');
+        const data = await api.getMyPatients();
+        console.log('[DEBUG] Patients response:', data);
         
-        // Handle array response directly
-        const finalData = Array.isArray(data) ? data : (data.data || data || []);
+        // Ensure we have an array
+        const patientsArray = Array.isArray(data) ? data : [];
         
         // Sort by last visit date descending (most recent first)
-        const sorted = (finalData || []).sort((a: any, b: any) => {
+        const sorted = patientsArray.sort((a: any, b: any) => {
           const dateA = a.last_visit_date ? new Date(a.last_visit_date).getTime() : 0;
           const dateB = b.last_visit_date ? new Date(b.last_visit_date).getTime() : 0;
           return dateB - dateA; // Newest first
         });
-        console.log('[EMERGENCY FIX] Sorted patients:', sorted);
+        
+        console.log('[DEBUG] Final patients data:', sorted.length, 'patients');
         return sorted;
       } catch (error) {
-        console.error('[EMERGENCY FIX] Failed to fetch patients:', error);
-        return [];
+        console.error('[ERROR] Failed to fetch patients:', error);
+        throw error;
       }
     },
     refetchInterval: 10000, // Refetch every 10 seconds
@@ -69,9 +69,7 @@ export default function PatientsScreen() {
     staleTime: 5000, // Data is stale after 5 seconds
   });
 
-  console.log('[DEBUG] PatientsScreen - patients data:', patients);
-  console.log('[DEBUG] PatientsScreen - isLoading:', isLoading);
-  console.log('[DEBUG] PatientsScreen - error:', error);
+  console.log('[DEBUG] PatientsScreen - patients:', patients.length, 'loaded, loading:', isLoading);
 
   // Filter patients
   const filteredPatients = patients.filter((patient: Patient) => {
@@ -113,7 +111,6 @@ export default function PatientsScreen() {
 
   return (
     <div className="max-w-7xl mx-auto">
-      <DebugAPITest />
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-800 mb-2">My Patients</h1>
