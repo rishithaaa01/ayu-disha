@@ -20,7 +20,10 @@ clinicianApi.interceptors.request.use((config) => {
 
 export const api = {
   // Generic methods
-  get: (url: string) => clinicianApi.get(url).then(res => res.data),
+  get: (url: string, cacheBust = false) => {
+    const finalUrl = cacheBust ? `${url}?t=${Date.now()}` : url;
+    return clinicianApi.get(finalUrl).then(res => res.data);
+  },
   post: (url: string, data?: any) => clinicianApi.post(url, data).then(res => res.data),
   
   // Queue & Patients

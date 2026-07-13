@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/clinicianApi';
+import DebugAPITest from '../../components/DebugAPITest';
 import { 
   Search, 
   Filter, 
@@ -43,7 +44,7 @@ export default function PatientsScreen() {
     queryFn: async () => {
       try {
         console.log('[DEBUG] Fetching my-patients...');
-        const response = await api.get('/clinician/my-patients');
+        const response = await api.get('/clinician/my-patients', true); // Cache bust
         console.log('[DEBUG] Patients API response:', response);
         console.log('[DEBUG] Response data:', response.data);
         console.log('[DEBUG] Response type:', typeof response);
@@ -116,6 +117,7 @@ export default function PatientsScreen() {
 
   return (
     <div className="max-w-7xl mx-auto">
+      <DebugAPITest />
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-800 mb-2">My Patients</h1>
