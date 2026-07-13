@@ -1020,21 +1020,69 @@ async def get_my_patients(current_user: UserResponse = Depends(require_role("doc
     """
     Returns all patients managed by this doctor (from completed visits and active consultations).
     """
-    if not current_user.hospital:
-        raise HTTPException(status_code=403, detail="Doctor is not assigned to any hospital")
-        
     db = get_database()
     
+    # Debug: Log what we're looking for
+    print(f"[DEBUG MY-PATIENTS] Doctor: name='{current_user.name}', id='{current_user.id}', type={type(current_user.id)}")
+    
     # Find all visits where this doctor is listed (completed, active, or in queue)
-    visits_cursor = db.visits.find({
-        "hospital_id": current_user.hospital,
-        "doctor_id": str(current_user.id)
-    }).sort("date", -1)
+    # Handle multiple possible doctor_id formats and search criteria
+    from bson import ObjectId
+    
+    # Build query conditions
+    query_conditions = []
+    
+    # Try string version of ID
+    query_conditions.append({"doctor_id": str(current_user.id)})
+    
+    # Try original ID format (could be string or ObjectId)
+    query_conditions.append({"doctor_id": current_user.id})
+    
+    # Try doctor name match
+    query_conditions.append({"doctor_name": current_user.name})
+    
+    # Try ObjectId conversion if possible
+    try:
+        doctor_object_id = ObjectId(str(current_user.id))
+        query_conditions.append({"doctor_id": doctor_object_id})
+        print(f"[DEBUG MY-PATIENTS] Added ObjectId condition: {doctor_object_id}")
+    except Exception as e:
+        print(f"[DEBUG MY-PATIENTS] Cannot convert to ObjectId: {e}")
+    
+    # Also check if doctor_id might be stored in other fields
+    query_conditions.append({"doctor": current_user.name})
+    query_conditions.append({"assigned_doctor": current_user.name})
+    query_conditions.append({"attending_doctor": current_user.name})
+    
+    print(f"[DEBUG MY-PATIENTS] Query conditions: {len(query_conditions)} conditions")
+    
+    # Execute query with OR
+    visits_cursor = db.visits.find({"$or": query_conditions}).sort("date", -1)
     
     visits = await visits_cursor.to_list(500)
     
+    print(f"[DEBUG MY-PATIENTS] Found {len(visits)} total visits for doctor {current_user.name}")
+    
+    # Debug: Show sample visits
+    for i, v in enumerate(visits[:10]):
+        print(f"[DEBUG MY-PATIENTS] Visit {i}: id={v.get('_id')}, patient_id={v.get('patient_id')}, "
+              f"doctor_id={v.get('doctor_id')} (type: {type(v.get('doctor_id'))}), "
+              f"doctor_name='{v.get('doctor_name')}', status={v.get('status')}, "
+              f"date={v.get('date')}")
+    
+    # Also check visits by scanning all visits (for debugging)
+    if len(visits) == 0:
+        print(f"[DEBUG MY-PATIENTS] No visits found with OR query. Checking all visits...")
+        all_visits = await db.visits.find({}).sort("date", -1).to_list(100)
+        matching_by_name = [v for v in all_visits if v.get('doctor_name') == current_user.name]
+        print(f"[DEBUG MY-PATIENTS] Found {len(matching_by_name)} visits by name match in all visits")
+        for v in matching_by_name[:5]:
+            print(f"[DEBUG MY-PATIENTS] Matching visit: doctor_id={v.get('doctor_id')}, doctor_name={v.get('doctor_name')}")
+    
     # Group by patient_id to get unique patients
     patient_ids = list(set([v.get("patient_id") for v in visits if v.get("patient_id")]))
+    
+    print(f"[DEBUG MY-PATIENTS] Unique patient IDs: {len(patient_ids)}")
     
     patients = []
     for patient_id in patient_ids:
@@ -1104,6 +1152,7 @@ async def get_referrals(current_user: UserResponse = Depends(require_role("docto
     db = get_database()
     
     # Get incoming referrals (to this doctor's hospital)
+    print(f"[DEBUG REFERRALS] Doctor {current_user.name} hospital: '{current_user.hospital}'")
     incoming_cursor = db.referrals.find({
         "to_hospital_id": current_user.hospital,
         "status": {"$in": ["pending", "accepted", "rejected", "seen", "completed"]}
@@ -1111,13 +1160,39 @@ async def get_referrals(current_user: UserResponse = Depends(require_role("docto
     
     incoming_refs = await incoming_cursor.to_list(500)
     
+    # Debug: Check if hospital matching might be an issue
+    if len(incoming_refs) == 0:
+        print(f"[DEBUG REFERRALS] No incoming referrals found with hospital_id='{current_user.hospital}'")
+        # Check all referrals to see what hospital_ids exist
+        all_refs_sample = await db.referrals.find({}).limit(10).to_list(10)
+        hospital_ids = set([r.get('to_hospital_id') for r in all_refs_sample])
+        print(f"[DEBUG REFERRALS] Sample hospital_ids in referrals: {hospital_ids}")
+    
     # Get outgoing referrals (from this doctor)
+    # Handle multiple possible from_doctor_id formats
+    from bson import ObjectId
+    
+    outgoing_query_conditions = [
+        {"from_doctor_id": str(current_user.id)},  # String format
+        {"from_doctor_id": current_user.id},       # Original format
+        {"from_doctor_name": current_user.name}    # Name match
+    ]
+    
+    # Try ObjectId conversion
+    try:
+        doctor_object_id = ObjectId(str(current_user.id))
+        outgoing_query_conditions.append({"from_doctor_id": doctor_object_id})
+    except:
+        pass
+    
     outgoing_cursor = db.referrals.find({
-        "from_doctor_id": str(current_user.id),
+        "$or": outgoing_query_conditions,
         "status": {"$in": ["pending", "accepted", "rejected", "seen", "completed"]}
     }).sort("created_date", -1)
     
     outgoing_refs = await outgoing_cursor.to_list(500)
+    
+    print(f"[DEBUG REFERRALS] Doctor {current_user.name}: found {len(incoming_refs)} incoming, {len(outgoing_refs)} outgoing referrals")
     
     referrals = []
     
@@ -1193,3 +1268,138 @@ async def get_referrals(current_user: UserResponse = Depends(require_role("docto
         })
     
     return referrals
+
+
+@router.post("/referrals/{referral_id}/accept")
+async def accept_referral(referral_id: str, current_user: UserResponse = Depends(require_role("doctor"))):
+    """
+    Accept a referral - adds the patient to doctor's queue.
+    """
+    if not current_user.hospital:
+        raise HTTPException(status_code=403, detail="Doctor is not assigned to any hospital")
+        
+    db = get_database()
+    
+    # Find the referral
+    referral = await db.referrals.find_one({"_id": safe_object_id(referral_id)})
+    if not referral:
+        raise HTTPException(status_code=404, detail="Referral not found")
+    
+    # Check if referral is meant for this doctor's hospital
+    if referral.get("to_hospital_id") != current_user.hospital:
+        raise HTTPException(status_code=403, detail="This referral is not for your hospital")
+    
+    # Check if referral is already accepted or completed
+    if referral.get("status") in ["accepted", "seen", "completed"]:
+        raise HTTPException(status_code=400, detail=f"Referral already {referral.get('status')}")
+    
+    # Update referral status
+    await db.referrals.update_one(
+        {"_id": safe_object_id(referral_id)},
+        {"$set": {
+            "status": "accepted",
+            "accepted_at": datetime.utcnow(),
+            "doctor_id": str(current_user.id),
+            "doctor_name": current_user.name,
+            "updated_date": datetime.utcnow()
+        }}
+    )
+    
+    # Create a visit in queue for this doctor
+    patient = await db.patients.find_one({"_id": safe_object_id(referral.get("patient_id"))})
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    
+    # Check if there's already an active visit for this patient
+    existing_active = await db.visits.find_one({
+        "patient_id": referral.get("patient_id"),
+        "status": {"$in": ["active", "in_queue"]},
+        "hospital_id": current_user.hospital
+    })
+    
+    if existing_active:
+        # Update existing visit to link with this referral
+        await db.visits.update_one(
+            {"_id": existing_active["_id"]},
+            {"$set": {
+                "referral_id": referral_id,
+                "doctor_id": str(current_user.id),
+                "doctor_name": current_user.name
+            }}
+        )
+        return {"status": "accepted", "visit_id": str(existing_active["_id"]), "message": "Linked to existing visit"}
+    
+    # Create new visit in queue
+    visit_doc = {
+        "patient_id": referral.get("patient_id"),
+        "hospital_id": current_user.hospital,
+        "hospital_name": current_user.hospital,
+        "doctor_id": str(current_user.id),
+        "doctor_name": current_user.name,
+        "date": datetime.utcnow(),
+        "chief_complaint": referral.get("reason", "Referred by ASHA"),
+        "status": "in_queue",
+        "referral_id": referral_id,
+        "appointment_type": "referred",
+        "risk_tag": referral.get("urgency", "routine"),
+        "referred_by": referral.get("from_worker_name") or "ASHA",
+        "diagnosis": [],
+        "prescriptions": [],
+        "notes": None,
+        "follow_up_date": None,
+        "created_at": datetime.utcnow()
+    }
+    
+    result = await db.visits.insert_one(visit_doc)
+    
+    print(f"[DEBUG ACCEPT REFERRAL] Doctor {current_user.name} accepted referral {referral_id}, created visit {result.inserted_id}")
+    
+    return {"status": "accepted", "visit_id": str(result.inserted_id), "message": "Patient added to queue"}
+
+@router.post("/referrals/{referral_id}/reject")
+async def reject_referral(
+    referral_id: str, 
+    data: Dict[str, Any] = None, 
+    current_user: UserResponse = Depends(require_role("doctor"))
+):
+    """
+    Reject a referral with optional reason.
+    """
+    if not current_user.hospital:
+        raise HTTPException(status_code=403, detail="Doctor is not assigned to any hospital")
+        
+    db = get_database()
+    
+    # Find the referral
+    referral = await db.referrals.find_one({"_id": safe_object_id(referral_id)})
+    if not referral:
+        raise HTTPException(status_code=404, detail="Referral not found")
+    
+    # Check if referral is meant for this doctor's hospital
+    if referral.get("to_hospital_id") != current_user.hospital:
+        raise HTTPException(status_code=403, detail="This referral is not for your hospital")
+    
+    # Check if referral is already processed
+    if referral.get("status") in ["accepted", "seen", "completed", "rejected"]:
+        raise HTTPException(status_code=400, detail=f"Referral already {referral.get('status')}")
+    
+    # Update referral status
+    update_data = {
+        "status": "rejected",
+        "rejected_at": datetime.utcnow(),
+        "rejected_by": str(current_user.id),
+        "rejected_by_name": current_user.name,
+        "updated_date": datetime.utcnow()
+    }
+    
+    if data and data.get("reason"):
+        update_data["rejection_reason"] = data["reason"]
+    
+    await db.referrals.update_one(
+        {"_id": safe_object_id(referral_id)},
+        {"$set": update_data}
+    )
+    
+    print(f"[DEBUG REJECT REFERRAL] Doctor {current_user.name} rejected referral {referral_id}")
+    
+    return {"status": "rejected", "message": "Referral rejected"}
