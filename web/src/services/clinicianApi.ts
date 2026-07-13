@@ -19,8 +19,13 @@ clinicianApi.interceptors.request.use((config) => {
 });
 
 export const api = {
+  // Generic methods
+  get: (url: string) => clinicianApi.get(url).then(res => res.data),
+  post: (url: string, data?: any) => clinicianApi.post(url, data).then(res => res.data),
+  
   // Queue & Patients
   getQueue: () => clinicianApi.get('/queue').then(res => res.data),
+  getMyPatients: () => clinicianApi.get('/my-patients').then(res => res.data),
   getPatientRecord: (id: string) => clinicianApi.get(`/patients/${id}`).then(res => res.data),
   getPatientSummary: (id: string) => clinicianApi.get(`/patients/${id}/summary`).then(res => res.data),
   
