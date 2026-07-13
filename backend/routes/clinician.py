@@ -1403,3 +1403,62 @@ async def reject_referral(
     print(f"[DEBUG REJECT REFERRAL] Doctor {current_user.name} rejected referral {referral_id}")
     
     return {"status": "rejected", "message": "Referral rejected"}
+
+@router.get("/debug/current-user")
+async def debug_current_user(current_user: UserResponse = Depends(require_role("doctor"))):
+    """
+    Debug endpoint to check current user information.
+    """
+    db = get_database()
+    
+    # Show current user info
+    user_info = {
+        "user_id": str(current_user.id),
+        "user_name": current_user.name,
+        "user_email": current_user.email,
+        "user_role": current_user.role,
+        "user_hospital": current_user.hospital,
+        "user_id_type": type(current_user.id).__name__
+    }
+    
+    print(f"[DEBUG USER] Current user info: {user_info}")
+    
+    # Check visits in database
+    all_visits = await db.visits.find({}).sort("date", -1).limit(20).to_list(20)
+    visits_info = []
+    
+    for v in all_visits:
+        visits_info.append({
+            "visit_id": str(v.get('_id')),
+            "patient_id": v.get('patient_id'),
+            "doctor_id": v.get('doctor_id'),
+            "doctor_id_type": type(v.get('doctor_id')).__name__ if v.get('doctor_id') else None,
+            "doctor_name": v.get('doctor_name'),
+            "status": v.get('status'),
+            "hospital_id": v.get('hospital_id'),
+            "date": str(v.get('date'))
+        })
+    
+    # Check doctor visits specifically
+    matching_visits = []
+    for v in all_visits:
+        if (v.get('doctor_id') == str(current_user.id) or 
+            v.get('doctor_id') == current_user.id or 
+            v.get('doctor_name') == current_user.name):
+            matching_visits.append({
+                "visit_id": str(v.get('_id')),
+                "patient_id": v.get('patient_id'),
+                "doctor_id": v.get('doctor_id'),
+                "doctor_name": v.get('doctor_name'),
+                "matched_by": "id_string" if v.get('doctor_id') == str(current_user.id) else
+                            "id_original" if v.get('doctor_id') == current_user.id else
+                            "name" if v.get('doctor_name') == current_user.name else "unknown"
+            })
+    
+    return {
+        "user_info": user_info,
+        "total_visits_in_db": len(all_visits),
+        "matching_visits_for_user": len(matching_visits),
+        "sample_visits": visits_info[:10],
+        "user_matching_visits": matching_visits
+    }
