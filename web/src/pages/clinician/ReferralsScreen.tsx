@@ -51,13 +51,23 @@ export default function ReferralsScreen() {
     queryFn: async () => {
       try {
         const response = await api.get('/clinician/referrals');
-        return response.data;
+        console.log('Referrals fetched:', response.data);
+        // Sort by created_date descending (most recent first)
+        const sorted = (response.data || []).sort((a: any, b: any) => {
+          const dateA = new Date(a.created_date).getTime();
+          const dateB = new Date(b.created_date).getTime();
+          return dateB - dateA; // Newest first
+        });
+        return sorted;
       } catch (error) {
         console.error('Failed to fetch referrals:', error);
         return [];
       }
     },
-    refetchInterval: 30000,
+    refetchInterval: 10000, // Refetch every 10 seconds
+    refetchOnWindowFocus: true,
+    refetchOnMount: 'stale',
+    staleTime: 5000, // Data is stale after 5 seconds
   });
 
   // Accept referral mutation
@@ -66,6 +76,8 @@ export default function ReferralsScreen() {
       api.post(`/clinician/referrals/${referralId}/accept`),
     onSuccess: () => {
       toast.success('Referral accepted successfully');
+      // Explicitly refetch to update stats immediately
+      refetch();
       queryClient.invalidateQueries({ queryKey: ['doctorReferrals'] });
     },
     onError: () => {
@@ -79,6 +91,8 @@ export default function ReferralsScreen() {
       api.post(`/clinician/referrals/${referralId}/reject`, { reason }),
     onSuccess: () => {
       toast.success('Referral rejected');
+      // Explicitly refetch to update stats immediately
+      refetch();
       queryClient.invalidateQueries({ queryKey: ['doctorReferrals'] });
     },
     onError: () => {

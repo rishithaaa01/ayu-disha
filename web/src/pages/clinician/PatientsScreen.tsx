@@ -43,13 +43,23 @@ export default function PatientsScreen() {
     queryFn: async () => {
       try {
         const response = await api.get('/clinician/my-patients');
-        return response.data;
+        console.log('Patients fetched:', response.data);
+        // Sort by last visit date descending (most recent first)
+        const sorted = (response.data || []).sort((a: any, b: any) => {
+          const dateA = a.last_visit_date ? new Date(a.last_visit_date).getTime() : 0;
+          const dateB = b.last_visit_date ? new Date(b.last_visit_date).getTime() : 0;
+          return dateB - dateA; // Newest first
+        });
+        return sorted;
       } catch (error) {
         console.error('Failed to fetch patients:', error);
         return [];
       }
     },
-    refetchInterval: 30000,
+    refetchInterval: 10000, // Refetch every 10 seconds
+    refetchOnWindowFocus: true,
+    refetchOnMount: 'stale',
+    staleTime: 5000, // Data is stale after 5 seconds
   });
 
   // Filter patients

@@ -173,7 +173,12 @@ export default function Login() {
         email: email,
         password: password
       });
-      handleSuccessfulLogin(res.data.user, res.data.access_token, res.data.refresh_token);
+      
+      // Ensure user data is fresh from backend
+      const userData = res.data.user;
+      console.log('Login successful - user data:', userData);
+      
+      handleSuccessfulLogin(userData, res.data.access_token, res.data.refresh_token);
     } catch (err) {
       setError(err.response?.data?.detail || 'Invalid email or password.');
     } finally {

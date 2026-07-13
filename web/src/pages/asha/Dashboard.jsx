@@ -308,7 +308,17 @@ export default function AshaDashboard() {
 
   const { data: referrals, isLoading: refLoading, refetch: refetchRef } = useQuery({
     queryKey: ['ashaReferrals'],
-    queryFn: () => api.get('/asha/referrals').then(r => r.data),
+    queryFn: async () => {
+      const response = await api.get('/asha/referrals');
+      // Sort by created_date descending (most recent first)
+      const sorted = (response.data || []).sort((a, b) => {
+        const dateA = a.created_date ? new Date(a.created_date).getTime() : 0;
+        const dateB = b.created_date ? new Date(b.created_date).getTime() : 0;
+        return dateB - dateA; // Newest first
+      });
+      return sorted;
+    },
+    refetchInterval: 30000,
     retry: 1,
   });
 
