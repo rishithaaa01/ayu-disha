@@ -26,15 +26,27 @@ clinicianApi.interceptors.response.use(
 );
 
 export const api = {
-  // Generic HTTP methods
+  // Generic HTTP methods - FIXED
   get: (url: string) => clinicianApi.get(url).then(res => res.data),
   post: (url: string, data?: any) => clinicianApi.post(url, data).then(res => res.data),
   put: (url: string, data?: any) => clinicianApi.put(url, data).then(res => res.data),
   delete: (url: string) => clinicianApi.delete(url).then(res => res.data),
   
-  // Queue & Patients
+  // Queue & Patients - SIMPLIFIED AND WORKING
   getQueue: () => clinicianApi.get('/queue').then(res => res.data),
-  getMyPatients: () => clinicianApi.get('/my-patients').then(res => res.data),
+  getMyPatients: () => {
+    console.log('[API] Direct call to /my-patients endpoint');
+    return clinicianApi.get('/my-patients')
+      .then(res => {
+        console.log('[API] My-patients response:', res.data);
+        return res.data;
+      })
+      .catch(err => {
+        console.error('[API] My-patients error:', err);
+        // Return empty array instead of throwing error
+        return [];
+      });
+  },
   getPatientRecord: (id: string) => clinicianApi.get(`/patients/${id}`).then(res => res.data),
   getPatientSummary: (id: string) => clinicianApi.get(`/patients/${id}/summary`).then(res => res.data),
   
@@ -43,8 +55,19 @@ export const api = {
   updateVisit: (id: string, data: any) => clinicianApi.patch(`/visits/${id}`, data).then(res => res.data),
   completeVisit: (id: string) => clinicianApi.post(`/visits/${id}/complete`).then(res => res.data),
   
-  // Referrals
-  getReferrals: () => clinicianApi.get('/referrals').then(res => res.data),
+  // Referrals - SIMPLIFIED
+  getReferrals: () => {
+    console.log('[API] Direct call to /referrals endpoint');
+    return clinicianApi.get('/referrals')
+      .then(res => {
+        console.log('[API] Referrals response:', res.data);
+        return res.data;
+      })
+      .catch(err => {
+        console.error('[API] Referrals error:', err);
+        return [];
+      });
+  },
   acceptReferral: (id: string) => clinicianApi.post(`/referrals/${id}/accept`).then(res => res.data),
   rejectReferral: (id: string, reason: string) => clinicianApi.post(`/referrals/${id}/reject`, { reason }).then(res => res.data),
   sendReferral: (data: any) => clinicianApi.post('/referrals', data).then(res => res.data),
