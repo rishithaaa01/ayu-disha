@@ -44,7 +44,7 @@ interface Referral {
 
 export default function ReferralsScreen() {
   const queryClient = useQueryClient();
-  const { notifyReferralAccepted, updateReferralCounts } = useRealTimeUpdates();
+  const { notifyReferralAccepted } = useRealTimeUpdates();
   const [activeTab, setActiveTab] = useState<'incoming' | 'outgoing'>('incoming');
   const [filterStatus, setFilterStatus] = useState<string>('all');
 
@@ -52,63 +52,31 @@ export default function ReferralsScreen() {
   const { data: referrals = [], isLoading, refetch } = useQuery({
     queryKey: ['doctorReferrals'],
     queryFn: async () => {
-      try {
-        console.log('[DEBUG] Fetching referrals...');
-        const data = await api.getReferrals();
-        console.log('[DEBUG] Referrals response:', data);
-        
-        // Ensure we have an array
-        const referralsArray = Array.isArray(data) ? data : [];
-        
-        // Sort by created_date descending (most recent first)
-        const sorted = referralsArray.sort((a: any, b: any) => {
-          const dateA = new Date(a.created_date).getTime();
-          const dateB = new Date(b.created_date).getTime();
-          return dateB - dateA; // Newest first
-        });
-        
-        console.log('[DEBUG] Final referrals data:', sorted.length, 'referrals');
-        
-        // Show success when data loads
-        if (sorted.length > 0) {
-          console.log(`[SUCCESS] Loaded ${sorted.length} referrals for doctor`);
-        }
-        
-        return sorted;
-      } catch (error) {
-        console.error('[ERROR] Failed to fetch referrals:', error);
-        
-        // Show user-friendly error message
-        if (error.message?.includes('pu.get is not a function')) {
-          toast.error('Loading issue detected. Please refresh the page.');
-        } else {
-          toast.error('Failed to load referrals. Retrying...');
-        }
-        
-        throw error;
-      }
+      const data = await api.getReferrals();
+
+      // Ensure we have an array
+      const referralsArray = Array.isArray(data) ? data : [];
+
+      // Sort by created_date descending (most recent first)
+      return referralsArray.sort((a: any, b: any) => {
+        const dateA = new Date(a.created_date).getTime();
+        const dateB = new Date(b.created_date).getTime();
+        return dateB - dateA;
+      });
     },
-    refetchInterval: 5000, // Refetch every 5 seconds for real-time updates
+    refetchInterval: 30000, // Refetch every 30 seconds
     refetchOnWindowFocus: true,
-    refetchOnMount: 'always', // Always refetch on mount
-    staleTime: 2000, // Data is stale after 2 seconds
-    retry: 3, // Retry failed requests 3 times
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
+    staleTime: 10000,
+    retry: 2,
   });
 
   // Accept referral mutation
   const acceptMutation = useMutation({
     mutationFn: (referralId: string) => api.acceptReferral(referralId),
     onSuccess: () => {
-      console.log('[DEBUG] Referral accepted successfully - updating counts');
-      
-      // Use the real-time update system
       notifyReferralAccepted();
-      
-      // Also trigger explicit refetch for immediate UI update
       refetch();
-      
-      console.log('[DEBUG] All queries invalidated after accepting referral');
+      toast.success('Referral accepted successfully');
     },
     onError: () => {
       toast.error('Failed to accept referral');

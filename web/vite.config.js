@@ -6,12 +6,12 @@ export default defineConfig({
   plugins: [react()],
   base: '/ayu-disha/',
   build: {
-    // Force new file names on each build to break cache
+    // Standard content-based hashing — ensures unique filenames per build content
     rollupOptions: {
       output: {
-        entryFileNames: `[name]-[hash]-${Date.now()}.js`,
-        chunkFileNames: `[name]-[hash]-${Date.now()}.js`,
-        assetFileNames: `[name]-[hash]-${Date.now()}.[ext]`
+        entryFileNames: `[name]-[hash].js`,
+        chunkFileNames: `[name]-[hash].js`,
+        assetFileNames: `[name]-[hash].[ext]`
       }
     }
   }

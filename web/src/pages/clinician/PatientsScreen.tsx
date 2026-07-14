@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/clinicianApi';
-import { useRealTimeUpdates } from '../../contexts/RealTimeUpdateContext';
 import { 
   Search, 
   Filter, 
@@ -12,13 +11,11 @@ import {
   MapPin,
   ChevronRight,
   Activity,
-  Heart,
   AlertTriangle,
   Clock,
   RefreshCw
 } from 'lucide-react';
 import { format } from 'date-fns';
-import toast from 'react-hot-toast';
 
 interface Patient {
   patient_id: string;
@@ -39,57 +36,29 @@ export default function PatientsScreen() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRisk, setFilterRisk] = useState<string>('all');
-  const { updatePatientCounts } = useRealTimeUpdates();
 
   // Fetch doctor's patients
-  const { data: patients = [], isLoading, refetch, error } = useQuery({
+  const { data: patients = [], isLoading, refetch } = useQuery({
     queryKey: ['doctorPatients'],
     queryFn: async () => {
-      try {
-        console.log('[DEBUG] Fetching my patients...');
-        const data = await api.getMyPatients();
-        console.log('[DEBUG] Patients response:', data);
-        
-        // Ensure we have an array
-        const patientsArray = Array.isArray(data) ? data : [];
-        
-        // Sort by last visit date descending (most recent first)
-        const sorted = patientsArray.sort((a: any, b: any) => {
-          const dateA = a.last_visit_date ? new Date(a.last_visit_date).getTime() : 0;
-          const dateB = b.last_visit_date ? new Date(b.last_visit_date).getTime() : 0;
-          return dateB - dateA; // Newest first
-        });
-        
-        console.log('[DEBUG] Final patients data:', sorted.length, 'patients');
-        
-        // Show success toast when data loads
-        if (sorted.length > 0) {
-          console.log(`[SUCCESS] Loaded ${sorted.length} patients for doctor`);
-        }
-        
-        return sorted;
-      } catch (error) {
-        console.error('[ERROR] Failed to fetch patients:', error);
-        
-        // Show user-friendly error message
-        if (error.message?.includes('pu.get is not a function')) {
-          toast.error('Loading issue detected. Please refresh the page.');
-        } else {
-          toast.error('Failed to load patients. Retrying...');
-        }
-        
-        throw error;
-      }
+      const data = await api.getMyPatients();
+
+      // Ensure we have an array
+      const patientsArray = Array.isArray(data) ? data : [];
+
+      // Sort by last visit date descending (most recent first)
+      return patientsArray.sort((a: any, b: any) => {
+        const dateA = a.last_visit_date ? new Date(a.last_visit_date).getTime() : 0;
+        const dateB = b.last_visit_date ? new Date(b.last_visit_date).getTime() : 0;
+        return dateB - dateA;
+      });
     },
-    refetchInterval: 5000, // Refetch every 5 seconds for real-time updates
+    refetchInterval: 30000, // Refetch every 30 seconds
     refetchOnWindowFocus: true,
-    refetchOnMount: 'always', // Always refetch on mount
-    staleTime: 2000, // Data is stale after 2 seconds
-    retry: 3, // Retry failed requests 3 times
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
+    staleTime: 10000,
+    retry: 2,
   });
 
-  console.log('[DEBUG] PatientsScreen - patients:', patients.length, 'loaded, loading:', isLoading);
 
   // Filter patients
   const filteredPatients = patients.filter((patient: Patient) => {
