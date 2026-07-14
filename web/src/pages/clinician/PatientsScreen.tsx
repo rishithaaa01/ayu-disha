@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/clinicianApi';
+import { useRealTimeUpdates } from '../../contexts/RealTimeUpdateContext';
 import { 
   Search, 
   Filter, 
@@ -11,6 +12,7 @@ import {
   MapPin,
   ChevronRight,
   Activity,
+  Heart,
   AlertTriangle,
   Clock,
   RefreshCw
@@ -36,6 +38,7 @@ export default function PatientsScreen() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRisk, setFilterRisk] = useState<string>('all');
+  const { updatePatientCounts } = useRealTimeUpdates();
 
   // Fetch doctor's patients
   const { data: patients = [], isLoading, refetch } = useQuery({
@@ -204,11 +207,7 @@ export default function PatientsScreen() {
           </div>
 
           <button
-            onClick={() => {
-              console.log('[MANUAL] Manual refresh triggered for patients');
-              refetch();
-              updatePatientCounts();
-            }}
+            onClick={() => { refetch(); updatePatientCounts(); }}
             className="px-4 py-2.5 bg-[#1B6CA8] hover:bg-[#155A8A] text-white rounded-xl text-sm font-semibold transition-colors flex items-center gap-2"
           >
             <RefreshCw size={16} />
