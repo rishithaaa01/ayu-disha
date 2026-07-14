@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/clinicianApi';
 import PatientHeader from './PatientHeader';
 import AISummaryCard from './AISummaryCard';
@@ -16,6 +16,8 @@ import {
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { useClinicianStore } from '../../../store/clinicianStore';
+import { useRealTimeUpdates } from '../../../contexts/RealTimeUpdateContext';
+import toast from 'react-hot-toast';
 
 interface PatientRecordPanelProps {
   patientId: string;
@@ -26,6 +28,8 @@ export default function PatientRecordPanel({ patientId, initialData }: PatientRe
   const [activeTab, setActiveTab] = useState<'history' | 'meds' | 'labs' | 'consents'>('history');
   const { setActiveVisitId } = useClinicianStore();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { notifyConsultationStarted } = useRealTimeUpdates();
 
   // 1. Fetch Full Patient Record
   const { data: record, isLoading: recordLoading } = useQuery({
@@ -41,15 +45,26 @@ export default function PatientRecordPanel({ patientId, initialData }: PatientRe
 
   const handleStartConsultation = async () => {
     try {
+      console.log('[DEBUG] Starting consultation for patient:', patientId);
+      
       const res = await api.startVisit({
         patient_id: patientId,
         chief_complaint: initialData.chief_complaint,
         referral_id: initialData.referral_id
       });
+      
+      console.log('[DEBUG] Consultation started, visit ID:', res.id);
+      
+      // Use the real-time update system
+      notifyConsultationStarted();
+      
+      // Navigate to consultation screen
       setActiveVisitId(res.id);
       navigate(`/clinician/consultation/${res.id}`);
+      
+      console.log('[DEBUG] Successfully started consultation and updated counts');
     } catch (e) {
-      console.error(e);
+      console.error('[ERROR] Failed to start consultation:', e);
       alert("Failed to start consultation");
     }
   };

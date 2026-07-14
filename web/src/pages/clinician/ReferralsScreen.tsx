@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/clinicianApi';
+import { useRealTimeUpdates } from '../../contexts/RealTimeUpdateContext';
 import toast from 'react-hot-toast';
 import {
   ArrowLeftRight,
@@ -15,7 +16,8 @@ import {
   Clock,
   AlertTriangle,
   Home,
-  Building2
+  Building2,
+  RefreshCw
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -42,6 +44,7 @@ interface Referral {
 
 export default function ReferralsScreen() {
   const queryClient = useQueryClient();
+  const { notifyReferralAccepted, updateReferralCounts } = useRealTimeUpdates();
   const [activeTab, setActiveTab] = useState<'incoming' | 'outgoing'>('incoming');
   const [filterStatus, setFilterStatus] = useState<string>('all');
 
@@ -65,28 +68,47 @@ export default function ReferralsScreen() {
         });
         
         console.log('[DEBUG] Final referrals data:', sorted.length, 'referrals');
+        
+        // Show success when data loads
+        if (sorted.length > 0) {
+          console.log(`[SUCCESS] Loaded ${sorted.length} referrals for doctor`);
+        }
+        
         return sorted;
       } catch (error) {
         console.error('[ERROR] Failed to fetch referrals:', error);
+        
+        // Show user-friendly error message
+        if (error.message?.includes('pu.get is not a function')) {
+          toast.error('Loading issue detected. Please refresh the page.');
+        } else {
+          toast.error('Failed to load referrals. Retrying...');
+        }
+        
         throw error;
       }
     },
-    refetchInterval: 10000, // Refetch every 10 seconds
+    refetchInterval: 5000, // Refetch every 5 seconds for real-time updates
     refetchOnWindowFocus: true,
-    refetchOnMount: 'stale',
-    staleTime: 5000, // Data is stale after 5 seconds
+    refetchOnMount: 'always', // Always refetch on mount
+    staleTime: 2000, // Data is stale after 2 seconds
+    retry: 3, // Retry failed requests 3 times
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
   });
 
   // Accept referral mutation
   const acceptMutation = useMutation({
     mutationFn: (referralId: string) => api.acceptReferral(referralId),
     onSuccess: () => {
-      toast.success('Referral accepted successfully');
-      // Explicitly refetch to update stats immediately
+      console.log('[DEBUG] Referral accepted successfully - updating counts');
+      
+      // Use the real-time update system
+      notifyReferralAccepted();
+      
+      // Also trigger explicit refetch for immediate UI update
       refetch();
-      queryClient.invalidateQueries({ queryKey: ['doctorReferrals'] });
-      // Also invalidate doctorPatients since accepting a referral adds a patient
-      queryClient.invalidateQueries({ queryKey: ['doctorPatients'] });
+      
+      console.log('[DEBUG] All queries invalidated after accepting referral');
     },
     onError: () => {
       toast.error('Failed to accept referral');
@@ -162,9 +184,17 @@ export default function ReferralsScreen() {
   return (
     <div className="max-w-7xl mx-auto">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-800 mb-2">Referrals</h1>
-        <p className="text-gray-500 text-sm">Manage incoming and outgoing patient referrals</p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Referrals</h1>
+          <p className="text-gray-500 text-sm">Manage incoming and outgoing patient referrals</p>
+        </div>
+        {isLoading && (
+          <div className="flex items-center gap-2 text-blue-600">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+            <span className="text-sm font-medium">Updating...</span>
+          </div>
+        )}
       </div>
 
       {/* Stats Cards */}
@@ -174,7 +204,10 @@ export default function ReferralsScreen() {
             <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Total</span>
             <ArrowLeftRight size={16} className="text-gray-500" />
           </div>
-          <p className="text-2xl font-bold text-gray-800">{stats.total}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-2xl font-bold text-gray-800">{stats.total}</p>
+            {isLoading && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>}
+          </div>
         </div>
         
         <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
@@ -182,7 +215,10 @@ export default function ReferralsScreen() {
             <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Incoming</span>
             <ArrowDownLeft size={16} className="text-blue-500" />
           </div>
-          <p className="text-2xl font-bold text-gray-800">{stats.incoming}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-2xl font-bold text-gray-800">{stats.incoming}</p>
+            {isLoading && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>}
+          </div>
         </div>
         
         <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
@@ -190,7 +226,10 @@ export default function ReferralsScreen() {
             <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Outgoing</span>
             <ArrowUpRight size={16} className="text-purple-500" />
           </div>
-          <p className="text-2xl font-bold text-gray-800">{stats.outgoing}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-2xl font-bold text-gray-800">{stats.outgoing}</p>
+            {isLoading && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500"></div>}
+          </div>
         </div>
         
         <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
@@ -198,7 +237,10 @@ export default function ReferralsScreen() {
             <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Pending</span>
             <Clock size={16} className="text-amber-500" />
           </div>
-          <p className="text-2xl font-bold text-gray-800">{stats.pending}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-2xl font-bold text-gray-800">{stats.pending}</p>
+            {isLoading && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-500"></div>}
+          </div>
         </div>
         
         <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
@@ -206,7 +248,10 @@ export default function ReferralsScreen() {
             <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Urgent</span>
             <AlertTriangle size={16} className="text-red-500" />
           </div>
-          <p className="text-2xl font-bold text-gray-800">{stats.urgent}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-2xl font-bold text-gray-800">{stats.urgent}</p>
+            {isLoading && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-500"></div>}
+          </div>
         </div>
       </div>
 
@@ -254,9 +299,14 @@ export default function ReferralsScreen() {
             </select>
             
             <button
-              onClick={() => refetch()}
-              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-semibold transition-colors"
+              onClick={() => {
+                console.log('[MANUAL] Manual refresh triggered for referrals');
+                refetch();
+                updateReferralCounts();
+              }}
+              className="px-4 py-2 bg-[#1B6CA8] hover:bg-[#155A8A] text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
             >
+              <RefreshCw size={16} />
               Refresh
             </button>
           </div>

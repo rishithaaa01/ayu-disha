@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/clinicianApi';
+import { useRealTimeUpdates } from '../../contexts/RealTimeUpdateContext';
 import { 
   Search, 
   Filter, 
@@ -13,9 +14,11 @@ import {
   Activity,
   Heart,
   AlertTriangle,
-  Clock
+  Clock,
+  RefreshCw
 } from 'lucide-react';
 import { format } from 'date-fns';
+import toast from 'react-hot-toast';
 
 interface Patient {
   patient_id: string;
@@ -36,6 +39,7 @@ export default function PatientsScreen() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRisk, setFilterRisk] = useState<string>('all');
+  const { updatePatientCounts } = useRealTimeUpdates();
 
   // Fetch doctor's patients
   const { data: patients = [], isLoading, refetch, error } = useQuery({
@@ -57,16 +61,32 @@ export default function PatientsScreen() {
         });
         
         console.log('[DEBUG] Final patients data:', sorted.length, 'patients');
+        
+        // Show success toast when data loads
+        if (sorted.length > 0) {
+          console.log(`[SUCCESS] Loaded ${sorted.length} patients for doctor`);
+        }
+        
         return sorted;
       } catch (error) {
         console.error('[ERROR] Failed to fetch patients:', error);
+        
+        // Show user-friendly error message
+        if (error.message?.includes('pu.get is not a function')) {
+          toast.error('Loading issue detected. Please refresh the page.');
+        } else {
+          toast.error('Failed to load patients. Retrying...');
+        }
+        
         throw error;
       }
     },
-    refetchInterval: 10000, // Refetch every 10 seconds
+    refetchInterval: 5000, // Refetch every 5 seconds for real-time updates
     refetchOnWindowFocus: true,
-    refetchOnMount: 'stale',
-    staleTime: 5000, // Data is stale after 5 seconds
+    refetchOnMount: 'always', // Always refetch on mount
+    staleTime: 2000, // Data is stale after 2 seconds
+    retry: 3, // Retry failed requests 3 times
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
   });
 
   console.log('[DEBUG] PatientsScreen - patients:', patients.length, 'loaded, loading:', isLoading);
@@ -112,9 +132,17 @@ export default function PatientsScreen() {
   return (
     <div className="max-w-7xl mx-auto">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-800 mb-2">My Patients</h1>
-        <p className="text-gray-500 text-sm">Patients you've consulted or are currently managing</p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">My Patients</h1>
+          <p className="text-gray-500 text-sm">Patients you've consulted or are currently managing</p>
+        </div>
+        {isLoading && (
+          <div className="flex items-center gap-2 text-blue-600">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+            <span className="text-sm font-medium">Updating...</span>
+          </div>
+        )}
       </div>
 
       {/* Stats Cards */}
@@ -124,7 +152,10 @@ export default function PatientsScreen() {
             <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Total Patients</span>
             <User size={16} className="text-blue-500" />
           </div>
-          <p className="text-2xl font-bold text-gray-800">{patients.length}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-2xl font-bold text-gray-800">{patients.length}</p>
+            {isLoading && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>}
+          </div>
         </div>
         
         <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
@@ -132,9 +163,12 @@ export default function PatientsScreen() {
             <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">High Risk</span>
             <AlertTriangle size={16} className="text-red-500" />
           </div>
-          <p className="text-2xl font-bold text-gray-800">
-            {patients.filter((p: Patient) => p.risk_level === 'high').length}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-2xl font-bold text-gray-800">
+              {patients.filter((p: Patient) => p.risk_level === 'high').length}
+            </p>
+            {isLoading && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-500"></div>}
+          </div>
         </div>
         
         <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
@@ -142,9 +176,12 @@ export default function PatientsScreen() {
             <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Chronic Cases</span>
             <Heart size={16} className="text-purple-500" />
           </div>
-          <p className="text-2xl font-bold text-gray-800">
-            {patients.filter((p: Patient) => p.chronic_conditions && p.chronic_conditions.length > 0).length}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-2xl font-bold text-gray-800">
+              {patients.filter((p: Patient) => p.chronic_conditions && p.chronic_conditions.length > 0).length}
+            </p>
+            {isLoading && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500"></div>}
+          </div>
         </div>
         
         <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
@@ -152,15 +189,18 @@ export default function PatientsScreen() {
             <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">This Week</span>
             <Calendar size={16} className="text-green-500" />
           </div>
-          <p className="text-2xl font-bold text-gray-800">
-            {patients.filter((p: Patient) => {
-              if (!p.last_visit_date) return false;
-              const lastVisit = new Date(p.last_visit_date);
-              const weekAgo = new Date();
-              weekAgo.setDate(weekAgo.getDate() - 7);
-              return lastVisit > weekAgo;
-            }).length}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-2xl font-bold text-gray-800">
+              {patients.filter((p: Patient) => {
+                if (!p.last_visit_date) return false;
+                const lastVisit = new Date(p.last_visit_date);
+                const weekAgo = new Date();
+                weekAgo.setDate(weekAgo.getDate() - 7);
+                return lastVisit > weekAgo;
+              }).length}
+            </p>
+            {isLoading && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-500"></div>}
+          </div>
         </div>
       </div>
 
@@ -195,9 +235,14 @@ export default function PatientsScreen() {
           </div>
 
           <button
-            onClick={() => refetch()}
-            className="px-4 py-2.5 bg-[#1B6CA8] hover:bg-[#155A8A] text-white rounded-xl text-sm font-semibold transition-colors"
+            onClick={() => {
+              console.log('[MANUAL] Manual refresh triggered for patients');
+              refetch();
+              updatePatientCounts();
+            }}
+            className="px-4 py-2.5 bg-[#1B6CA8] hover:bg-[#155A8A] text-white rounded-xl text-sm font-semibold transition-colors flex items-center gap-2"
           >
+            <RefreshCw size={16} />
             Refresh
           </button>
         </div>
