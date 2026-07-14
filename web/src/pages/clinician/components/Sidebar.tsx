@@ -21,9 +21,9 @@ export default function Sidebar() {
   };
 
   const navItems = [
+    { name: 'Referrals', icon: ArrowLeftRight, path: '/clinician/referrals' },
     { name: 'OPD Queue', icon: Users, path: '/clinician/queue' },
     { name: 'My Patients', icon: UserRound, path: '/clinician/patients' },
-    { name: 'Referrals', icon: ArrowLeftRight, path: '/clinician/referrals' },
     { name: 'Settings', icon: Settings, path: '/clinician/settings' },
   ];
 

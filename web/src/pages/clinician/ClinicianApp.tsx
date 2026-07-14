@@ -54,8 +54,8 @@ export default function ClinicianApp() {
               <Route path="referrals" element={<ReferralsScreen />} />
               <Route path="consultation/:visitId" element={<ConsultationScreen />} />
               <Route path="settings" element={<SettingsScreen />} />
-              <Route path="/" element={<Navigate to="queue" replace />} />
-              <Route path="*" element={<Navigate to="queue" replace />} />
+              <Route path="/" element={<Navigate to="referrals" replace />} />
+              <Route path="*" element={<Navigate to="referrals" replace />} />
             </Routes>
           </div>
         </main>

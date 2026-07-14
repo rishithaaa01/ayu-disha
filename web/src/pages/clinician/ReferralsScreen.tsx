@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import api from '../../services/clinicianApi';
 import { useRealTimeUpdates } from '../../contexts/RealTimeUpdateContext';
 import toast from 'react-hot-toast';
@@ -17,7 +18,8 @@ import {
   AlertTriangle,
   Home,
   Building2,
-  RefreshCw
+  RefreshCw,
+  Stethoscope
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -44,7 +46,8 @@ interface Referral {
 
 export default function ReferralsScreen() {
   const queryClient = useQueryClient();
-  const { notifyReferralAccepted } = useRealTimeUpdates();
+  const navigate = useNavigate();
+  const { notifyReferralAccepted, updateReferralCounts } = useRealTimeUpdates();
   const [activeTab, setActiveTab] = useState<'incoming' | 'outgoing'>('incoming');
   const [filterStatus, setFilterStatus] = useState<string>('all');
 
@@ -267,11 +270,7 @@ export default function ReferralsScreen() {
             </select>
             
             <button
-              onClick={() => {
-                console.log('[MANUAL] Manual refresh triggered for referrals');
-                refetch();
-                updateReferralCounts();
-              }}
+              onClick={() => { refetch(); updateReferralCounts(); }}
               className="px-4 py-2 bg-[#1B6CA8] hover:bg-[#155A8A] text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
             >
               <RefreshCw size={16} />
@@ -382,27 +381,41 @@ export default function ReferralsScreen() {
                     </div>
                   </div>
 
-                  {/* Action Buttons (only for pending incoming referrals) */}
-                  {activeTab === 'incoming' && referral.status === 'pending' && (
-                    <div className="flex gap-2 shrink-0">
+                  {/* Action Buttons */}
+                  <div className="flex gap-2 shrink-0 flex-col items-end">
+                    {/* Pending incoming: Accept / Reject */}
+                    {activeTab === 'incoming' && referral.status === 'pending' && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleAccept(referral.id)}
+                          disabled={acceptMutation.isPending}
+                          className="flex items-center gap-1 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                        >
+                          <CheckCircle size={14} />
+                          Accept
+                        </button>
+                        <button
+                          onClick={() => handleReject(referral.id)}
+                          disabled={rejectMutation.isPending}
+                          className="flex items-center gap-1 px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                        >
+                          <XCircle size={14} />
+                          Reject
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Accepted incoming: Start Consultation */}
+                    {activeTab === 'incoming' && referral.status === 'accepted' && (
                       <button
-                        onClick={() => handleAccept(referral.id)}
-                        disabled={acceptMutation.isPending}
-                        className="flex items-center gap-1 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                        onClick={() => navigate('/clinician/queue')}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-[#1B6CA8] hover:bg-[#155A8A] text-white rounded-lg text-xs font-semibold transition-colors shadow-sm shadow-[#1B6CA8]/30"
                       >
-                        <CheckCircle size={14} />
-                        Accept
+                        <Stethoscope size={14} />
+                        Start Consultation
                       </button>
-                      <button
-                        onClick={() => handleReject(referral.id)}
-                        disabled={rejectMutation.isPending}
-                        className="flex items-center gap-1 px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
-                      >
-                        <XCircle size={14} />
-                        Reject
-                      </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
