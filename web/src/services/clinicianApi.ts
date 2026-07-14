@@ -38,12 +38,6 @@ export const api = {
   getPatientRecord: (id: string) => clinicianApi.get(`/patients/${id}`).then(res => res.data),
   getPatientSummary: (id: string) => clinicianApi.get(`/patients/${id}/summary`).then(res => res.data),
   
-  // Queue & Patients
-  getQueue: () => clinicianApi.get('/queue').then(res => res.data),
-  getMyPatients: () => clinicianApi.get('/my-patients').then(res => res.data),
-  getPatientRecord: (id: string) => clinicianApi.get(`/patients/${id}`).then(res => res.data),
-  getPatientSummary: (id: string) => clinicianApi.get(`/patients/${id}/summary`).then(res => res.data),
-  
   // Consultations
   startVisit: (data: any) => clinicianApi.post('/visits', data).then(res => res.data),
   updateVisit: (id: string, data: any) => clinicianApi.patch(`/visits/${id}`, data).then(res => res.data),
@@ -62,7 +56,7 @@ export const api = {
     clinicianApi.get('/differential', { params: { symptoms, patient_id: patientId } }).then(res => res.data),
   
   // Voice & Lab Orders
-  processVoiceNote: (visitId: string, audioBlob: Blob) => {
+  processVoiceNote: async (visitId: string, audioBlob: Blob) => {
     const formData = new FormData();
     formData.append('file', audioBlob, 'voice_note.webm');
     return clinicianApi.post(`/voice-note?visit_id=${visitId}`, formData).then(res => res.data);
@@ -70,7 +64,7 @@ export const api = {
   orderLabs: (data: any) => clinicianApi.post('/lab-orders', data).then(res => res.data),
   
   // Lab Results (secure - doctor can only see their assigned patients' results)
-  getMyLabResults: () => {
+  getMyLabResults: async () => {
     const labApi = axios.create({
       baseURL: import.meta.env.VITE_API_URL || 'https://ayu-disha.onrender.com/api',
       timeout: 15000,
