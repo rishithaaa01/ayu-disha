@@ -44,6 +44,15 @@ export default function Login() {
   const [regVillage, setRegVillage] = useState('');
   const [regDistrict, setRegDistrict] = useState('Chennai');
   const [regLanguage, setRegLanguage] = useState('en');
+  const [regSpeciality, setRegSpeciality] = useState('');
+
+  const SPECIALITIES = [
+    'General Medicine', 'Gynaecology', 'Obstetrics', 'Paediatrics',
+    'Orthopaedics', 'Cardiology', 'Gastroenterology', 'Dermatology',
+    'Ophthalmology', 'ENT', 'Neurology', 'Psychiatry', 'Oncology',
+    'Nephrology', 'Pulmonology', 'Endocrinology', 'Urology',
+    'Radiology', 'Anaesthesiology', 'Emergency Medicine'
+  ];
 
   // Forgot / Reset Password state
   const [forgotEmail, setForgotEmail] = useState('');
@@ -198,6 +207,11 @@ export default function Login() {
       setLoading(false);
       return;
     }
+    if (regRole === 'doctor' && !regSpeciality) {
+      setError('Please select your medical speciality');
+      setLoading(false);
+      return;
+    }
     if (regRole === 'asha' && !regVillage) {
       setError('Please select your assigned village');
       setLoading(false);
@@ -214,7 +228,8 @@ export default function Login() {
         language: regLanguage,
         district: regDistrict,
         hospital: (regRole === 'doctor' || regRole === 'lab') ? regHospital : null,
-        village: regRole === 'asha' ? regVillage : null
+        village: regRole === 'asha' ? regVillage : null,
+        speciality: regRole === 'doctor' ? regSpeciality : null
       };
       const res = await api.post('/auth/register', payload);
       setSuccessMsg('Account created successfully!');
@@ -360,6 +375,11 @@ export default function Login() {
       setLoading(false);
       return;
     }
+    if (regRole === 'doctor' && !regSpeciality) {
+      setError('Please select your medical speciality');
+      setLoading(false);
+      return;
+    }
     if (regRole === 'asha' && !regVillage) {
       setError('Please select your assigned village');
       setLoading(false);
@@ -373,7 +393,8 @@ export default function Login() {
         language: regLanguage,
         district: regDistrict,
         hospital: (regRole === 'doctor' || regRole === 'lab') ? regHospital : null,
-        village: regRole === 'asha' ? regVillage : null
+        village: regRole === 'asha' ? regVillage : null,
+        speciality: regRole === 'doctor' ? regSpeciality : null
       };
       
       const token = tempToken || useAuthStore.getState().token;
@@ -705,6 +726,7 @@ export default function Login() {
                               setRegRole(r.id);
                               setRegHospital('');
                               setRegVillage('');
+                              setRegSpeciality('');
                             }}
                             className={`flex items-start justify-between p-3 rounded-xl border cursor-pointer transition-all duration-200 ${
                               isSelected 
@@ -772,6 +794,30 @@ export default function Login() {
                           </button>
                         </div>
                       )}
+                    </div>
+                  )}
+
+                  {/* Speciality Selector — Doctors only */}
+                  {regRole === 'doctor' && (
+                    <div className="space-y-2 animate-fadeIn">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-500">Medical Speciality</label>
+                      <div className="relative flex items-center border border-gray-300 rounded-xl bg-white focus-within:ring-2 focus-within:ring-[#1B6CA8] overflow-hidden">
+                        <div className="pl-4 text-gray-400">
+                          <Activity size={16} />
+                        </div>
+                        <select
+                          value={regSpeciality}
+                          onChange={(e) => setRegSpeciality(e.target.value)}
+                          className="w-full p-3 bg-transparent outline-none text-sm text-gray-700 appearance-none bg-white cursor-pointer"
+                          required
+                        >
+                          <option value="">-- Select Speciality --</option>
+                          {SPECIALITIES.map(s => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                        <div className="pr-4 pointer-events-none text-gray-400 text-xs">▼</div>
+                      </div>
                     </div>
                   )}
 
@@ -1088,6 +1134,7 @@ export default function Login() {
                           setRegRole(r.id);
                           setRegHospital('');
                           setRegVillage('');
+                          setRegSpeciality('');
                         }}
                         className={`flex items-start justify-between p-3 rounded-xl border cursor-pointer transition-all duration-200 ${
                           isSelected 
@@ -1155,6 +1202,30 @@ export default function Login() {
                       </button>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Speciality Selector — Doctors only (Step 5) */}
+              {regRole === 'doctor' && (
+                <div className="space-y-2 animate-fadeIn">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500">Medical Speciality</label>
+                  <div className="relative flex items-center border border-gray-300 rounded-xl bg-white focus-within:ring-2 focus-within:ring-[#1B6CA8] overflow-hidden">
+                    <div className="pl-4 text-gray-400">
+                      <Activity size={16} />
+                    </div>
+                    <select
+                      value={regSpeciality}
+                      onChange={(e) => setRegSpeciality(e.target.value)}
+                      className="w-full p-3 bg-transparent outline-none text-sm text-gray-700 appearance-none bg-white cursor-pointer"
+                      required
+                    >
+                      <option value="">-- Select Speciality --</option>
+                      {SPECIALITIES.map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                    <div className="pr-4 pointer-events-none text-gray-400 text-xs">▼</div>
+                  </div>
                 </div>
               )}
 

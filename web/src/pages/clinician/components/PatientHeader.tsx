@@ -1,13 +1,21 @@
 import React from 'react';
-import { ShieldCheck, ArrowRight, User } from 'lucide-react';
+import { ShieldCheck, ArrowRight, User, AlertTriangle } from 'lucide-react';
 
 interface PatientHeaderProps {
   patient: any;
   onStartConsultation: () => void;
   status: 'in_queue' | 'active' | 'completed';
+  isReferralRejected?: boolean;
+  rejectionReason?: string;
 }
 
-export default function PatientHeader({ patient, onStartConsultation, status }: PatientHeaderProps) {
+export default function PatientHeader({ 
+  patient, 
+  onStartConsultation, 
+  status, 
+  isReferralRejected = false, 
+  rejectionReason 
+}: PatientHeaderProps) {
   const profile = patient?.profile || patient; // Handle both full record and queue entry formats
 
   return (
@@ -52,13 +60,26 @@ export default function PatientHeader({ patient, onStartConsultation, status }: 
 
         <div className="flex items-center gap-4">
           {status === 'in_queue' && (
-            <button 
-              onClick={onStartConsultation}
-              className="bg-[#D35400] hover:bg-[#A04000] text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-amber-900/10 transition-all active:scale-95"
-            >
-              <span>Start Consultation</span>
-              <ArrowRight size={18} />
-            </button>
+            <div className="flex flex-col items-end gap-1.5">
+              {isReferralRejected && (
+                <div className="flex items-center gap-1.5 text-xs text-red-600 font-bold bg-red-50 px-3 py-1.5 rounded-lg border border-red-100 mb-1 animate-fadeIn">
+                  <AlertTriangle size={14} />
+                  <span>Referral Rejected {rejectionReason ? `(${rejectionReason})` : ''}. Ask patient to re-book.</span>
+                </div>
+              )}
+              <button 
+                onClick={onStartConsultation}
+                disabled={isReferralRejected}
+                className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95 ${
+                  isReferralRejected 
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed shadow-none' 
+                    : 'bg-[#D35400] hover:bg-[#A04000] text-white shadow-amber-900/10'
+                }`}
+              >
+                <span>Start Consultation</span>
+                <ArrowRight size={18} />
+              </button>
+            </div>
           )}
           {status === 'active' && (
             <div className="bg-green-100 text-green-700 px-4 py-2 rounded-xl font-bold flex items-center gap-2 border border-green-200">
@@ -77,3 +98,4 @@ export default function PatientHeader({ patient, onStartConsultation, status }: 
     </div>
   );
 }
+

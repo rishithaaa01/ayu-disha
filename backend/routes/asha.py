@@ -618,3 +618,49 @@ async def sync_data(
         results["visits"] += 1
         
     return {"status": "success", "synced_count": results}
+
+# --- ASHA NOTIFICATIONS ---
+
+@router.get("/notifications")
+async def get_notifications(current_user: UserResponse = Depends(get_current_user)):
+    """
+    Returns all notifications for this ASHA worker (patient symptom alerts from their village).
+    """
+    db = get_database()
+    cursor = db.notifications.find(
+        {"asha_id": str(current_user.id)}
+    ).sort("created_at", -1).limit(50)
+    notifications = await cursor.to_list(50)
+
+    result = []
+    for n in notifications:
+        n["id"] = str(n.pop("_id"))
+        if "created_at" in n:
+            n["created_at"] = n["created_at"].isoformat()
+        result.append(n)
+
+    return result
+
+@router.patch("/notifications/{notif_id}/read")
+async def mark_notification_read(notif_id: str, current_user: UserResponse = Depends(get_current_user)):
+    """
+    Marks a specific notification as read.
+    """
+    db = get_database()
+    await db.notifications.update_one(
+        {"_id": safe_object_id(notif_id), "asha_id": str(current_user.id)},
+        {"$set": {"read": True, "read_at": datetime.utcnow()}}
+    )
+    return {"status": "ok"}
+
+@router.patch("/notifications/read-all")
+async def mark_all_notifications_read(current_user: UserResponse = Depends(get_current_user)):
+    """
+    Marks all notifications for this ASHA worker as read.
+    """
+    db = get_database()
+    await db.notifications.update_many(
+        {"asha_id": str(current_user.id), "read": False},
+        {"$set": {"read": True, "read_at": datetime.utcnow()}}
+    )
+    return {"status": "ok"}

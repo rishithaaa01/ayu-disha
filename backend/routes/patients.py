@@ -295,6 +295,8 @@ async def log_symptoms(req: SymptomLogRequest, current_user: UserResponse = Depe
         raise HTTPException(status_code=404, detail="Patient profile not found.")
         
     patient_id = str(patient["_id"])
+    patient_name = patient.get("name", "Unknown Patient")
+    patient_village = patient.get("village") or current_user.village
     
     prompt = f"""
     You are a professional clinical triage AI agent.
@@ -347,6 +349,29 @@ async def log_symptoms(req: SymptomLogRequest, current_user: UserResponse = Depe
     # Force referral if severe
     if risk_level in ["URGENT", "SEVERE"]:
         refer_to_doctor = True
+
+    # --- Symptom → Speciality mapping ---
+    SYMPTOM_SPECIALITY_MAP = [
+        (["stomach", "abdomen", "gastric", "vomit", "nausea", "acidity", "bowel", "diarrhea", "ulcer"], "Gastroenterology"),
+        (["pregnant", "pregnancy", "gynaec", "period", "menstrual", "uterus", "ovary", "vaginal", "cervix", "labour", "delivery"], "Gynaecology"),
+        (["bone", "joint", "knee", "fracture", "ortho", "leg pain", "back pain", "spine", "shoulder", "hip", "ankle"], "Orthopaedics"),
+        (["heart", "chest pain", "cardiac", "palpitation", "breathless", "blood pressure", "bp"], "Cardiology"),
+        (["eye", "vision", "cataract", "glaucoma", "blur"], "Ophthalmology"),
+        (["ear", "nose", "throat", "ent", "tonsil", "sinus", "hearing"], "ENT"),
+        (["skin", "rash", "itch", "derma", "allergy", "eczema", "psoriasis"], "Dermatology"),
+        (["child", "infant", "baby", "pediatric", "toddler"], "Paediatrics"),
+        (["neuro", "seizure", "headache", "migraine", "paralysis", "stroke", "nerve"], "Neurology"),
+        (["kidney", "urine", "renal", "dialysis", "nephro"], "Nephrology"),
+        (["lung", "breath", "asthma", "tuberculosis", "tb", "cough", "chest"], "Pulmonology"),
+        (["diabetes", "thyroid", "hormone", "sugar", "endo"], "Endocrinology"),
+    ]
+
+    transcript_lower = req.transcript.lower()
+    target_speciality = "General Medicine"  # default
+    for keywords, speciality in SYMPTOM_SPECIALITY_MAP:
+        if any(kw in transcript_lower for kw in keywords):
+            target_speciality = speciality
+            break
         
     # Auto-Refer
     if refer_to_doctor:
@@ -357,11 +382,13 @@ async def log_symptoms(req: SymptomLogRequest, current_user: UserResponse = Depe
         ref_dict = {
             "patient_id": patient_id,
             "to_hospital_id": req.preferred_hospital_id,
+            "to_speciality": target_speciality,
             "urgency": "Immediate" if risk_level == "SEVERE" else "Today",
             "from_worker_id": current_user.id,
-            "from_worker_name": current_user.name,
+            "from_worker_name": patient_name,
             "asha_observations": f"Self-reported: {req.transcript}",
             "ai_summary": result_json.get("reasoning", ""),
+            "reason": f"Auto-referred ({target_speciality}): {result_json.get('reasoning', '')[:120]}",
             "created_at": datetime.utcnow(),
             "status": "pending",
             "asha_id": "SELF"
@@ -375,7 +402,7 @@ async def log_symptoms(req: SymptomLogRequest, current_user: UserResponse = Depe
             "doctor_name": "Pending Assignment",
             "date": datetime.utcnow(),
             "created_at": datetime.utcnow(),
-            "chief_complaint": f"Self Referral: {req.transcript[:100]}...",
+            "chief_complaint": f"Self Referral ({target_speciality}): {req.transcript[:100]}...",
             "status": "in_queue",
             "appointment_type": "referred",
             "risk_tag": "urgent" if risk_level in ["URGENT", "SEVERE"] else "watch",
@@ -384,6 +411,30 @@ async def log_symptoms(req: SymptomLogRequest, current_user: UserResponse = Depe
             "diagnosis": [],
             "prescriptions": []
         })
+
+    # --- ASHA Notification ---
+    try:
+        if patient_village:
+            asha_workers = await db.users.find(
+                {"role": "asha", "village": patient_village}
+            ).to_list(10)
+            if asha_workers:
+                notif_docs = [{
+                    "asha_id": str(asha["_id"]),
+                    "patient_id": patient_id,
+                    "patient_name": patient_name,
+                    "patient_village": patient_village,
+                    "symptoms_summary": req.transcript[:300],
+                    "risk_level": risk_level,
+                    "target_speciality": target_speciality if refer_to_doctor else None,
+                    "referred": refer_to_doctor,
+                    "created_at": datetime.utcnow(),
+                    "read": False
+                } for asha in asha_workers]
+                await db.notifications.insert_many(notif_docs)
+    except Exception as e:
+        print(f"[ASHA NOTIFICATION ERROR] {e}")  # Non-critical, don't fail the request
         
     result_json["offline_saved"] = False
+    result_json["target_speciality"] = target_speciality
     return result_json

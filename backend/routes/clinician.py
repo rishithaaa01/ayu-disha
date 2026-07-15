@@ -53,6 +53,8 @@ class QueueEntry(BaseModel):
     risk_tag: str  # urgent, watch, low
     appointment_type: str # walkin, referred, followup
     referred_by: Optional[str] = None
+    referral_rejected: Optional[bool] = False
+    rejection_reason: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -111,10 +113,10 @@ async def get_queue(current_user: UserResponse = Depends(require_role("doctor"))
     db = get_database()
     hospital_id = current_user.hospital
     
-    # query visits for in_queue
+    # query visits for in_queue AND referral_rejected (so doctor sees rejected ones too)
     visits = await db.visits.find({
         "hospital_id": hospital_id,
-        "status": "in_queue"
+        "status": {"$in": ["in_queue", "referral_rejected"]}
     }).to_list(100)
     
     queue = []
@@ -148,6 +150,8 @@ async def get_queue(current_user: UserResponse = Depends(require_role("doctor"))
             "risk_tag": v.get("risk_tag", "low"),
             "appointment_type": v.get("appointment_type", "walkin"),
             "referred_by": v.get("referred_by"),
+            "referral_rejected": v.get("status") == "referral_rejected",
+            "rejection_reason": v.get("rejection_reason"),
             "created_at": created_at
         })
         
@@ -1223,6 +1227,7 @@ async def get_referrals(current_user: UserResponse = Depends(require_role("docto
             "from_facility": None,
             "to_doctor": current_user.name,
             "to_facility": current_user.hospital,
+            "to_speciality": ref.get("to_speciality"),
             "reason": ref.get("reason", ""),
             "notes": ref.get("asha_observations", ""),
             "urgency": ref.get("urgency", "routine"),
@@ -1258,6 +1263,7 @@ async def get_referrals(current_user: UserResponse = Depends(require_role("docto
             "from_facility": current_user.hospital,
             "to_doctor": ref.get("to_doctor_name"),
             "to_facility": ref.get("to_hospital_name"),
+            "to_speciality": ref.get("to_speciality"),
             "reason": ref.get("reason", ""),
             "notes": ref.get("notes", ""),
             "urgency": ref.get("urgency", "routine"),
@@ -1293,17 +1299,27 @@ async def accept_referral(referral_id: str, current_user: UserResponse = Depends
     if referral.get("status") in ["accepted", "seen", "completed"]:
         raise HTTPException(status_code=400, detail=f"Referral already {referral.get('status')}")
     
-    # Update referral status
-    await db.referrals.update_one(
-        {"_id": safe_object_id(referral_id)},
+    # Atomically accept - only if still pending (first-accept-wins)
+    result = await db.referrals.find_one_and_update(
+        {"_id": safe_object_id(referral_id), "status": "pending"},
         {"$set": {
             "status": "accepted",
             "accepted_at": datetime.utcnow(),
             "doctor_id": str(current_user.id),
             "doctor_name": current_user.name,
             "updated_date": datetime.utcnow()
-        }}
+        }},
+        return_document=False  # return the original doc (before update)
     )
+
+    if result is None:
+        # Already accepted by someone else — fetch current state
+        current_ref = await db.referrals.find_one({"_id": safe_object_id(referral_id)})
+        assigned_to = current_ref.get("doctor_name", "another doctor") if current_ref else "another doctor"
+        raise HTTPException(
+            status_code=409,
+            detail=f"Referral already assigned to {assigned_to}. First-accept-wins."
+        )
     
     # Create a visit in queue for this doctor
     patient = await db.patients.find_one({"_id": safe_object_id(referral.get("patient_id"))})
@@ -1398,6 +1414,21 @@ async def reject_referral(
     await db.referrals.update_one(
         {"_id": safe_object_id(referral_id)},
         {"$set": update_data}
+    )
+
+    # Also mark any linked in_queue visit as referral_rejected
+    rejection_reason = data.get("reason", "No reason provided") if data else "No reason provided"
+    await db.visits.update_many(
+        {
+            "referral_id": referral_id,
+            "hospital_id": current_user.hospital,
+            "status": "in_queue"
+        },
+        {"$set": {
+            "status": "referral_rejected",
+            "rejection_reason": rejection_reason,
+            "rejected_at": datetime.utcnow()
+        }}
     )
     
     print(f"[DEBUG REJECT REFERRAL] Doctor {current_user.name} rejected referral {referral_id}")

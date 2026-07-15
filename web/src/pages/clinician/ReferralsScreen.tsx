@@ -42,11 +42,15 @@ interface Referral {
   created_date: string;
   updated_date?: string;
   asha_name?: string;
+  to_speciality?: string;
 }
+
+import { useAuthStore } from '../../store/authStore';
 
 export default function ReferralsScreen() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const { notifyReferralAccepted, updateReferralCounts } = useRealTimeUpdates();
   const [activeTab, setActiveTab] = useState<'incoming' | 'outgoing'>('incoming');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -81,8 +85,9 @@ export default function ReferralsScreen() {
       refetch();
       toast.success('Referral accepted successfully');
     },
-    onError: () => {
-      toast.error('Failed to accept referral');
+    onError: (err: any) => {
+      const errorMsg = err.response?.data?.detail || 'Failed to accept referral';
+      toast.error(errorMsg);
     },
   });
 
@@ -319,6 +324,16 @@ export default function ReferralsScreen() {
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${getStatusColor(referral.status)}`}>
                           {referral.status}
                         </span>
+                        {referral.to_speciality && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EBF5FB] text-[#1B6CA8] border border-blue-200">
+                            {referral.to_speciality}
+                          </span>
+                        )}
+                        {referral.to_speciality && user?.speciality && referral.to_speciality.toLowerCase() === user.speciality.toLowerCase() && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-705 border border-purple-200 flex items-center gap-1 animate-pulse">
+                            ✨ Matches Your Speciality
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500 mb-2">

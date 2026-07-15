@@ -327,6 +327,34 @@ export default function AshaDashboard() {
     queryFn: () => api.get('/auth/hospitals').then(r => r.data),
     retry: 1,
   });
+
+  // ASHA Notifications Query (fetches patient symptom alerts from their village)
+  const { data: notifications, isLoading: notifLoading, refetch: refetchNotifs } = useQuery({
+    queryKey: ['ashaNotifications'],
+    queryFn: () => api.get('/asha/notifications').then(r => r.data),
+    refetchInterval: 30000, // Refresh every 30s
+    retry: 1,
+  });
+
+  const unreadNotificationsCount = (notifications || []).filter(n => !n.read).length;
+
+  const handleMarkAsRead = async (id) => {
+    try {
+      await api.patch(`/asha/notifications/${id}/read`);
+      refetchNotifs();
+    } catch (err) {
+      console.error("Failed to mark notification as read", err);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    try {
+      await api.patch(`/asha/notifications/read-all`);
+      refetchNotifs();
+    } catch (err) {
+      console.error("Failed to mark all as read", err);
+    }
+  };
   const handleLogout = () => {
     logout();
     navigate('/login');
@@ -674,6 +702,21 @@ export default function AshaDashboard() {
               >
                 Referral Log Queue
               </button>
+              <button
+                onClick={() => setActiveTab('alerts')}
+                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
+                  activeTab === 'alerts'
+                    ? 'bg-[#1B6CA8] text-white'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <span>Village Alerts</span>
+                {unreadNotificationsCount > 0 && (
+                  <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-extrabold leading-none animate-pulse">
+                    {unreadNotificationsCount}
+                  </span>
+                )}
+              </button>
             </div>
           </div>
 
@@ -855,6 +898,101 @@ export default function AshaDashboard() {
                     )}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {activeTab === 'alerts' && (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-gray-800">Symptom Alerts from your Village</h3>
+                    <p className="text-xs text-gray-500 mt-0.5">Real-time reports when patients log symptoms using Ayu Disha.</p>
+                  </div>
+                  {unreadNotificationsCount > 0 && (
+                    <button
+                      onClick={handleMarkAllAsRead}
+                      className="text-xs text-[#1B6CA8] font-bold hover:underline"
+                    >
+                      Mark all as read
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  {notifications && notifications.length > 0 ? (
+                    notifications.map((notif) => {
+                      const isUrgent = notif.risk_level === 'URGENT' || notif.risk_level === 'SEVERE';
+                      const isWarning = notif.risk_level === 'WATCH';
+                      
+                      return (
+                        <div
+                          key={notif.id}
+                          className={`p-5 rounded-2xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                            !notif.read
+                              ? isUrgent
+                                ? 'bg-red-50/40 border-red-200 shadow-sm'
+                                : isWarning
+                                  ? 'bg-amber-50/40 border-amber-200 shadow-sm'
+                                  : 'bg-blue-50/30 border-blue-200 shadow-sm'
+                              : 'bg-white border-gray-100 hover:border-gray-200'
+                          }`}
+                        >
+                          <div className="space-y-2 max-w-2xl">
+                            <div className="flex items-center flex-wrap gap-2">
+                              <span className={`w-2.5 h-2.5 rounded-full ${
+                                isUrgent ? 'bg-red-500' : isWarning ? 'bg-amber-500' : 'bg-green-500'
+                              } ${!notif.read ? 'animate-pulse' : ''}`} />
+                              <h4 className="font-bold text-gray-800">{notif.patient_name}</h4>
+                              <span className="text-xs text-gray-400 font-semibold">({notif.patient_village || 'Your Village'})</span>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
+                                isUrgent
+                                  ? 'bg-red-100 text-red-700'
+                                  : isWarning
+                                    ? 'bg-amber-100 text-amber-700'
+                                    : 'bg-green-100 text-green-700'
+                              }`}>
+                                {notif.risk_level} Risk
+                              </span>
+                              {notif.referred && (
+                                <span className="bg-blue-100 text-blue-750 text-[10px] font-bold px-2 py-0.5 rounded">
+                                  Auto-Referred {notif.target_speciality ? `— ${notif.target_speciality}` : ''}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs font-semibold text-gray-500 mt-1 uppercase tracking-wider">Symptoms Reported:</p>
+                            <p className="text-sm text-gray-700 italic bg-white/40 p-2.5 rounded-lg border border-gray-100/50">
+                              "{notif.symptoms_summary}"
+                            </p>
+                            <p className="text-[10px] text-gray-400 font-medium">
+                              Logged on {new Date(notif.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-3 shrink-0">
+                            {!notif.read ? (
+                              <button
+                                onClick={() => handleMarkAsRead(notif.id)}
+                                className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1"
+                              >
+                                <CheckCircle2 size={12} className="text-green-600" />
+                                <span>Acknowledge</span>
+                              </button>
+                            ) : (
+                              <span className="text-xs text-gray-400 font-bold flex items-center gap-1 bg-gray-50 px-2.5 py-1.5 rounded-lg">
+                                <CheckCircle2 size={12} className="text-gray-400" />
+                                <span>Seen</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="text-center py-12 text-gray-400 font-semibold">
+                      No village symptom alerts logged yet.
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>

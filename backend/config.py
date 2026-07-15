@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
+from pathlib import Path
 
 class Settings(BaseSettings):
     mongodb_uri: str
@@ -34,6 +35,6 @@ class Settings(BaseSettings):
     debug: bool = False
 
     class Config:
-        env_file = ".env"
+        env_file = str(Path(__file__).parent / ".env")
 
 settings = Settings()

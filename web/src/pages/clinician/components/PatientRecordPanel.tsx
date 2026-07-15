@@ -84,6 +84,8 @@ export default function PatientRecordPanel({ patientId, initialData }: PatientRe
         patient={record} 
         status="in_queue" 
         onStartConsultation={handleStartConsultation} 
+        isReferralRejected={initialData?.referral_rejected}
+        rejectionReason={initialData?.rejection_reason}
       />
 
       <div className="flex-1 overflow-y-auto custom-scrollbar pb-20">
