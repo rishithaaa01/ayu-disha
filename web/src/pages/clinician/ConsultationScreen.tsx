@@ -139,7 +139,7 @@ export default function ConsultationScreen() {
   ];
 
   return (
-    <div className="flex flex-col h-screen bg-[#F7F3EE] overflow-hidden -m-8">
+    <div className="flex flex-col h-[calc(100vh-64px)] bg-[#F7F3EE] overflow-hidden -m-8">
       {/* Patient Header */}
       <PatientHeader 
         patient={effectiveRecord} 
@@ -224,7 +224,7 @@ export default function ConsultationScreen() {
           </div>
 
           {/* Footer Actions */}
-          <div className="p-8 bg-white border-t border-[#E2DDD8] flex items-center justify-between">
+          <div className="p-6 bg-white border-t border-[#E2DDD8] flex items-center justify-between">
             <button 
               onClick={() => navigate('/clinician/queue')}
               className="flex items-center gap-2 text-[#888] font-bold hover:text-[#555]"
@@ -234,9 +234,9 @@ export default function ConsultationScreen() {
             </button>
             <button 
               onClick={handleComplete}
-              className="bg-green-600 hover:bg-green-700 text-white px-10 py-5 rounded-[24px] font-bold text-lg flex items-center gap-3 shadow-xl shadow-green-900/10 transition-all active:scale-95"
+              className="bg-green-600 hover:bg-green-700 text-white px-8 py-3.5 rounded-xl font-bold text-base flex items-center gap-2 shadow-lg shadow-green-900/10 transition-all active:scale-95"
             >
-              <CheckCircle size={24} />
+              <CheckCircle size={20} />
               <span>Complete Consultation</span>
             </button>
           </div>
