@@ -1160,7 +1160,7 @@ async def get_referrals(current_user: UserResponse = Depends(require_role("docto
     incoming_cursor = db.referrals.find({
         "to_hospital_id": current_user.hospital,
         "status": {"$in": ["pending", "accepted", "rejected", "seen", "completed"]}
-    }).sort("created_date", -1)
+    }).sort("created_at", -1)
     
     incoming_refs = await incoming_cursor.to_list(500)
     
@@ -1192,7 +1192,7 @@ async def get_referrals(current_user: UserResponse = Depends(require_role("docto
     outgoing_cursor = db.referrals.find({
         "$or": outgoing_query_conditions,
         "status": {"$in": ["pending", "accepted", "rejected", "seen", "completed"]}
-    }).sort("created_date", -1)
+    }).sort("created_at", -1)
     
     outgoing_refs = await outgoing_cursor.to_list(500)
     
@@ -1232,7 +1232,7 @@ async def get_referrals(current_user: UserResponse = Depends(require_role("docto
             "notes": ref.get("asha_observations", ""),
             "urgency": ref.get("urgency", "routine"),
             "status": ref.get("status", "pending"),
-            "created_date": ref.get("created_date", datetime.utcnow()).isoformat() if ref.get("created_date") else datetime.utcnow().isoformat(),
+            "created_date": (ref.get("created_at") or ref.get("created_date") or datetime.utcnow()).isoformat() if (ref.get("created_at") or ref.get("created_date")) else datetime.utcnow().isoformat(),
             "updated_date": ref.get("updated_date"),
             "asha_name": asha["name"] if asha else None
         })
@@ -1268,7 +1268,7 @@ async def get_referrals(current_user: UserResponse = Depends(require_role("docto
             "notes": ref.get("notes", ""),
             "urgency": ref.get("urgency", "routine"),
             "status": ref.get("status", "pending"),
-            "created_date": ref.get("created_date", datetime.utcnow()).isoformat() if ref.get("created_date") else datetime.utcnow().isoformat(),
+            "created_date": (ref.get("created_at") or ref.get("created_date") or datetime.utcnow()).isoformat() if (ref.get("created_at") or ref.get("created_date")) else datetime.utcnow().isoformat(),
             "updated_date": ref.get("updated_date"),
             "asha_name": None
         })
