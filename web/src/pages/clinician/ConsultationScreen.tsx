@@ -130,6 +130,16 @@ export default function ConsultationScreen() {
 
   if (effectiveLoading || (!activePatient && !resolvedPatientId)) return <div className="p-12"><LoadingSkeleton type="profile" /></div>;
 
+  if (!effectiveRecord) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-12 bg-white m-8 border border-[#E2DDD8] rounded-[24px] text-center shadow-sm">
+        <Sparkles size={40} className="text-gray-300 mx-auto mb-3" />
+        <p className="font-bold text-gray-700">Failed to load patient record</p>
+        <p className="text-gray-400 text-sm mt-1">Please return to the OPD Queue and try starting the consultation again.</p>
+      </div>
+    );
+  }
+
   const headerTabs = [
     { id: 'differential', label: 'AI Differential', icon: Sparkles },
     { id: 'prescription', label: 'Prescription', icon: Pill },

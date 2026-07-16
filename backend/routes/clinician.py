@@ -285,9 +285,9 @@ async def get_patient_record(patient_id: str, current_user: UserResponse = Depen
     # Basic info (always available)
     basic_info = {
         "id": str(patient["_id"]),
-        "name": patient["name"],
-        "date_of_birth": patient["date_of_birth"],
-        "gender": patient["gender"],
+        "name": patient.get("name", "Unknown Patient"),
+        "date_of_birth": patient.get("date_of_birth", "2000-01-01"),
+        "gender": patient.get("gender", "other"),
         "blood_group": patient.get("blood_group"),
         "allergies": patient.get("allergies", []),
         "abha_number": patient.get("abha_number")
@@ -1136,7 +1136,7 @@ async def get_my_patients(current_user: UserResponse = Depends(require_role("doc
         
         patients.append({
             "patient_id": str(patient["_id"]),
-            "name": patient["name"],
+            "name": patient.get("name", "Unknown Patient"),
             "age": age,
             "gender": patient.get("gender"),
             "mobile": patient.get("mobile"),

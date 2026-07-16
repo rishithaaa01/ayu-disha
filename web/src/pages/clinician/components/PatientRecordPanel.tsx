@@ -71,6 +71,16 @@ export default function PatientRecordPanel({ patientId, initialData }: PatientRe
 
   if (recordLoading) return <div className="p-8"><LoadingSkeleton type="profile" /><div className="mt-8"><LoadingSkeleton type="card" count={3} /></div></div>;
 
+  if (!record) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-white border border-[#E2DDD8] rounded-2xl m-4 text-center shadow-sm">
+        <AlertTriangle size={32} className="text-red-500 mb-2" />
+        <p className="font-bold text-gray-700">Failed to load patient record</p>
+        <p className="text-gray-400 text-sm mt-1">Please try again or check the patient's consent status.</p>
+      </div>
+    );
+  }
+
   const tabs = [
     { id: 'history', label: 'History', icon: History },
     { id: 'meds', label: 'Medications', icon: Pill },
@@ -120,7 +130,7 @@ export default function PatientRecordPanel({ patientId, initialData }: PatientRe
           {activeTab === 'history' && (
             <div className="space-y-6">
               {record.visits?.length > 0 ? (
-                record.visits.map((visit: any, idx: number) => (
+                (record.visits || []).map((visit: any, idx: number) => (
                   <div key={visit.id} className="relative pl-8">
                     {/* Timeline Line */}
                     <div className="absolute left-3 top-2 bottom-0 w-0.5 bg-[#F7F3EE]" />
@@ -200,7 +210,7 @@ export default function PatientRecordPanel({ patientId, initialData }: PatientRe
                 </thead>
                 <tbody>
                   {record.current_medications?.length > 0 ? (
-                    record.current_medications.map((m: any, i: number) => (
+                    (record.current_medications || []).map((m: any, i: number) => (
                       <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-[#FBFCFC]'}>
                         <td className="px-5 py-4 font-bold text-[#333]">{m.name || m.medicine}</td>
                         <td className="px-5 py-4 text-[#666]">{m.dosage}</td>
@@ -221,7 +231,7 @@ export default function PatientRecordPanel({ patientId, initialData }: PatientRe
           {activeTab === 'labs' && (
             <div className="space-y-4">
               {record.lab_results?.length > 0 ? (
-                record.lab_results.map((lab: any) => (
+                (record.lab_results || []).map((lab: any) => (
                   <div key={lab._id || lab.id} className={`bg-white border rounded-2xl p-5 hover:shadow-sm transition-all ${
                     lab.ai_is_abnormal ? 'border-red-200' :
                     lab.status === 'resulted' ? 'border-green-200' : 'border-[#E2DDD8]'
