@@ -283,17 +283,6 @@ async def send_referral(ref: ReferralCreate, current_user: UserResponse = Depend
     if not hospital_check:
         raise HTTPException(status_code=400, detail="Target hospital not found in database")
 
-    ref_dict = ref.dict()
-    ref_dict["asha_id"] = current_user.id
-    ref_dict["from_worker_id"] = current_user.id
-    ref_dict["from_worker_name"] = current_user.name
-    ref_dict["created_at"] = datetime.utcnow()
-    ref_dict["status"] = "pending"
-    
-    res = await db.referrals.insert_one(ref_dict)
-    ref_id = str(res.inserted_id)
-    ref_dict["id"] = ref_id
-    
     # ENSURE PATIENT RECORD EXISTS
     try:
         if not ref.patient_id or len(ref.patient_id) != 24:
@@ -313,9 +302,19 @@ async def send_referral(ref: ReferralCreate, current_user: UserResponse = Depend
             }
             p_res = await db.patients.insert_one(stub_patient)
             ref.patient_id = str(p_res.inserted_id)
-            ref_dict["patient_id"] = ref.patient_id
     except Exception as e:
         print(f"Patient Stub Creation Error: {e}")
+
+    ref_dict = ref.dict()
+    ref_dict["asha_id"] = current_user.id
+    ref_dict["from_worker_id"] = current_user.id
+    ref_dict["from_worker_name"] = current_user.name
+    ref_dict["created_at"] = datetime.utcnow()
+    ref_dict["status"] = "pending"
+    
+    res = await db.referrals.insert_one(ref_dict)
+    ref_id = str(res.inserted_id)
+    ref_dict["id"] = ref_id
 
     # BRIDGE TO CLINICIAN QUEUE
     await db.visits.insert_one({
