@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../services/api';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
 import {
   Users, Activity, MapPin, Home, ArrowUpRight, Plus, CheckCircle2,
   RefreshCcw, AlertTriangle, LogOut, FileText, ChevronRight, User,
-  Calendar, Phone, Shield, Languages, Info, Mic, Sparkles
+  Calendar, Phone, Shield, Languages, Info, Mic, Sparkles, Bell
 } from 'lucide-react';
 
 function MetricCard({ title, value, change, icon: Icon, color, alert }) {
@@ -37,9 +37,18 @@ function MetricCard({ title, value, change, icon: Icon, color, alert }) {
 
 export default function AshaDashboard() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, logout } = useAuthStore();
   const [activeTab, setActiveTab] = useState('households');
-  
+  const [showBellDropdown, setShowBellDropdown] = useState(false);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
+
   // Search & Filtering States
   const [searchQuery, setSearchQuery] = useState('');
   const [riskFilter, setRiskFilter] = useState('All');
@@ -571,11 +580,99 @@ export default function AshaDashboard() {
             <p className="text-sm font-bold text-gray-800">{user?.name || 'ASHA Worker'}</p>
             <p className="text-xs text-[#1B6CA8] font-semibold">{user?.village || user?.district || '—'}</p>
           </div>
+          <div className="relative">
+            <button
+              onClick={() => setShowBellDropdown(!showBellDropdown)}
+              className={`relative p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 ${showBellDropdown ? 'bg-gray-100' : ''}`}
+            >
+              <Bell size={18} />
+              {unreadNotificationsCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] bg-red-500 rounded-full border border-white flex items-center justify-center text-[8px] font-extrabold text-white px-0.5">
+                  {unreadNotificationsCount}
+                </span>
+              )}
+            </button>
+
+            {showBellDropdown && (
+              <div className="absolute right-0 mt-3 w-80 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden z-50 animate-fadeIn text-left">
+                <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                  <span className="font-bold text-xs uppercase tracking-wider text-gray-600">Village Alerts</span>
+                  {unreadNotificationsCount > 0 && (
+                    <span className="bg-red-100 text-red-600 px-2 py-0.5 rounded-full text-[9px] font-extrabold">
+                      {unreadNotificationsCount} New
+                    </span>
+                  )}
+                </div>
+                
+                <div className="max-h-[300px] overflow-y-auto divide-y divide-gray-100 custom-scrollbar">
+                  {notifications && notifications.length > 0 ? (
+                    notifications.slice(0, 5).map((notif) => {
+                      const isUrgent = notif.risk_level === 'URGENT' || notif.risk_level === 'SEVERE';
+                      const isWarning = notif.risk_level === 'WATCH';
+                      return (
+                        <div
+                          key={notif.id || notif._id}
+                          onClick={() => {
+                            setShowBellDropdown(false);
+                            handleMarkAsRead(notif.id || notif._id);
+                            setActiveTab('alerts');
+                          }}
+                          className={`p-4 hover:bg-blue-50/10 cursor-pointer transition-colors border-l-4 ${
+                            !notif.read
+                              ? isUrgent
+                                ? 'border-red-500 bg-red-50/5'
+                                : isWarning
+                                  ? 'border-amber-500 bg-amber-50/5'
+                                  : 'border-blue-500 bg-blue-50/5'
+                              : 'border-transparent'
+                          }`}
+                        >
+                          <div className="flex justify-between items-start gap-2 mb-1">
+                            <p className="text-xs font-bold text-gray-800">{notif.patient_name}</p>
+                            <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase ${
+                              isUrgent
+                                ? 'bg-red-50 text-red-600'
+                                : isWarning
+                                  ? 'bg-amber-50 text-amber-600'
+                                  : 'bg-green-50 text-green-600'
+                            }`}>
+                              {notif.risk_level}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-gray-500 line-clamp-2">
+                            {notif.symptoms_summary || 'Logged symptom screening'}
+                          </p>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="p-8 text-center text-gray-400">
+                      <p className="text-sm font-semibold">All caught up!</p>
+                      <p className="text-xs mt-1">No pending village alerts.</p>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="p-2.5 border-t border-gray-100 bg-gray-50 text-center">
+                  <button
+                    onClick={() => {
+                      setShowBellDropdown(false);
+                      setActiveTab('alerts');
+                    }}
+                    className="text-xs text-[#1B6CA8] font-bold hover:underline"
+                  >
+                    View All Village Alerts
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           <button
             onClick={() => {
               refetchStats();
               refetchHh();
               refetchRef();
+              refetchNotifs();
             }}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-500"
           >

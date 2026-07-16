@@ -1,10 +1,40 @@
+import { useState } from 'react';
 import { useNavigate, NavLink } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { LogOut, Home, FileText, Pill, FlaskConical, ShieldCheck, Users, Map, ArrowUpRight, Stethoscope } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import api from '../services/api';
+import { LogOut, Home, FileText, Pill, FlaskConical, ShieldCheck, Users, Map, ArrowUpRight, Stethoscope, Bell } from 'lucide-react';
 
 export default function Navbar() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
+  const [showNotifs, setShowNotifs] = useState(false);
+  const queryClient = useQueryClient();
+
+  // Fetch patient notifications if they are a patient
+  const { data: notifications = [] } = useQuery({
+    queryKey: ['patientNotifications', user?.id],
+    queryFn: () => api.get('/lab/notifications').then(res => res.data).catch(() => []),
+    enabled: !!user && user.role === 'patient',
+    refetchInterval: 15000,
+  });
+
+  const unreadCount = (notifications || []).filter(n => !n.read).length;
+
+  const markReadMutation = useMutation({
+    mutationFn: (notifId) => api.patch(`/lab/notifications/${notifId}/read`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['patientNotifications'] });
+    }
+  });
+
+  const handleNotificationClick = (notif) => {
+    if (!notif.read) {
+      markReadMutation.mutate(notif.id || notif._id);
+    }
+    setShowNotifs(false);
+    navigate('/patient/tests');
+  };
 
   const handleLogout = () => {
     logout();
@@ -58,6 +88,69 @@ export default function Navbar() {
       </div>
 
       <div className="flex items-center space-x-4">
+        {user?.role === 'patient' && (
+          <div className="relative">
+            <button 
+              onClick={() => setShowNotifs(!showNotifs)}
+              className={`relative p-2 hover:bg-white/10 rounded-full transition-colors text-white ${showNotifs ? 'bg-white/10' : ''}`}
+            >
+              <Bell size={18} />
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] bg-red-500 rounded-full border border-[#1B6CA8] flex items-center justify-center text-[8px] font-extrabold text-white px-0.5">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+
+            {showNotifs && (
+              <div className="absolute right-0 mt-3 w-80 bg-white border border-[#E2DDD8] rounded-2xl shadow-xl overflow-hidden z-50 animate-fadeIn text-left text-gray-800">
+                <div className="px-4 py-3 bg-[#F7F3EE] border-b border-[#E2DDD8] flex justify-between items-center">
+                  <span className="font-bold text-xs uppercase tracking-wider text-gray-600">Health Updates</span>
+                  {unreadCount > 0 && (
+                    <span className="bg-red-100 text-red-600 px-2 py-0.5 rounded-full text-[9px] font-extrabold">
+                      {unreadCount} New
+                    </span>
+                  )}
+                </div>
+                
+                <div className="max-h-[300px] overflow-y-auto divide-y divide-[#E2DDD8] custom-scrollbar">
+                  {notifications.length > 0 ? (
+                    notifications.map((notif) => (
+                      <div 
+                        key={notif.id || notif._id} 
+                        onClick={() => handleNotificationClick(notif)}
+                        className={`p-4 hover:bg-blue-50/10 cursor-pointer transition-colors border-l-4 ${
+                          !notif.read ? 'border-[#1B6CA8] bg-blue-50/5' : 'border-transparent'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start gap-2 mb-1">
+                          <p className="text-xs font-bold text-gray-800">{notif.title || 'Lab Result Ready'}</p>
+                          {notif.is_abnormal && (
+                            <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-red-50 text-red-600 uppercase">
+                              Attention
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-gray-500 leading-normal">
+                          {notif.message}
+                        </p>
+                        <p className="text-[9px] text-gray-400 mt-2 font-medium">
+                          {new Date(notif.created_at).toLocaleDateString('en-IN', { dateStyle: 'medium' })}
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-8 text-center text-gray-400">
+                      <p className="text-sm font-semibold">No notifications</p>
+                      <p className="text-xs mt-1">We will notify you here when your test results are ready.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="text-right hidden sm:block">
           <div className="text-sm font-semibold">{user?.name || 'User'}</div>
           <div className="text-xs text-white/60 capitalize">{user?.role}</div>
