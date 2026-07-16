@@ -36,6 +36,12 @@ def safe_object_id(id_str: str):
             detail=f"Invalid ID format: {id_str}. Must be a 24-character hex string."
         )
 
+def safe_object_id_silent(id_str: str) -> Optional[ObjectId]:
+    try:
+        return ObjectId(id_str) if id_str else None
+    except Exception:
+        return None
+
 router = APIRouter()
 
 # --- SCHEMAS ---
@@ -1202,8 +1208,11 @@ async def get_referrals(current_user: UserResponse = Depends(require_role("docto
     
     # Process incoming
     for ref in incoming_refs:
-        patient = await db.patients.find_one({"_id": safe_object_id(ref.get("patient_id"))})
-        asha = await db.users.find_one({"_id": safe_object_id(ref.get("from_worker_id"))}) if ref.get("from_worker_id") else None
+        p_id = safe_object_id_silent(ref.get("patient_id"))
+        patient = await db.patients.find_one({"_id": p_id}) if p_id else None
+        
+        w_id = safe_object_id_silent(ref.get("from_worker_id"))
+        asha = await db.users.find_one({"_id": w_id}) if w_id else None
         
         if not patient:
             continue
@@ -1239,7 +1248,8 @@ async def get_referrals(current_user: UserResponse = Depends(require_role("docto
     
     # Process outgoing
     for ref in outgoing_refs:
-        patient = await db.patients.find_one({"_id": safe_object_id(ref.get("patient_id"))})
+        p_id = safe_object_id_silent(ref.get("patient_id"))
+        patient = await db.patients.find_one({"_id": p_id}) if p_id else None
         
         if not patient:
             continue
