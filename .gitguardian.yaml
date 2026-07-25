@@ -1,0 +1,51 @@
+# GitGuardian Configuration
+# This file prevents false positives from example files
+
+# Files to exclude from secret scanning
+paths-ignore:
+  - "**/*.example"
+  - "**/.env.example"
+  - "**/env.example"
+  - "**/*.md"  # Documentation files with example credentials
+  - "**/README*"
+  - "**/SETUP*"
+  - "**/QUICK_START*"
+  - "**/*PRODUCTION*"
+  - "**/node_modules/**"
+  - "**/.venv/**"
+  - "**/venv/**"
+  - "**/dist/**"
+  - "**/build/**"
+
+# Ignore test/placeholder credentials
+matches-ignore:
+  - name: Generic API Key
+    match: your_.*_key_here
+  - name: Generic API Key
+    match: your_.*_api_key
+  - name: Generic Token
+    match: your_.*_token
+  - name: Generic Secret
+    match: your_.*_secret
+  - name: Placeholder MongoDB URI
+    match: your_mongodb_atlas_connection_string
+  - name: Placeholder Email
+    match: your_email@gmail.com
+  - name: Placeholder Email
+    match: noreply@yourdomain.com
+  - name: Example Twilio
+    match: AC1234567890abcdef
+  - name: Example SendGrid
+    match: SG\.your_sendgrid_api_key_here
+  - name: Example SendGrid
+    match: SG\.xxx
+  - name: Example Firebase
+    match: firebase-adminsdk
+  - name: Example Phone
+    match: \+1555.*
+  - name: Example Password
+    match: your_16_char_app_password
+  - name: Example Password
+    match: abcdefghijklmnop
+
+# Ignore specific file patterns
