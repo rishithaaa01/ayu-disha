@@ -24,7 +24,11 @@ class Settings(BaseSettings):
     twilio_from_number: Optional[str] = None
     fast2sms_api_key: Optional[str] = None
     
-    # Optional SMTP configuration for email sending
+    # SendGrid for Email OTP (Recommended - 12,000 emails/month free)
+    sendgrid_api_key: Optional[str] = None
+    sendgrid_from_email: Optional[str] = None
+    
+    # Optional SMTP configuration for email sending (Gmail or other)
     smtp_host: Optional[str] = None
     smtp_port: Optional[int] = 587
     smtp_username: Optional[str] = None

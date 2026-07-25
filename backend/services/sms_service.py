@@ -10,8 +10,8 @@ class SMSService:
         # Clean mobile number
         mobile_clean = mobile.strip().replace(" ", "")
         
-        # 1. Try Twilio if configured (disabled in debug mode to prevent slow/hanging cloud timeouts)
-        if not settings.debug and settings.twilio_account_sid and settings.twilio_auth_token and settings.twilio_from_number:
+        # 1. Try Twilio if configured
+        if settings.twilio_account_sid and settings.twilio_auth_token and settings.twilio_from_number:
             print("Attempting to send OTP via Twilio...")
             url = f"https://api.twilio.com/2010-04-01/Accounts/{settings.twilio_account_sid}/Messages.json"
             auth = (settings.twilio_account_sid, settings.twilio_auth_token)
@@ -32,8 +32,8 @@ class SMSService:
             except Exception as e:
                 print("ERROR: Twilio communication error")
  
-        # 2. Try Fast2SMS if configured (disabled in debug mode to prevent slow/hanging cloud timeouts)
-        if not settings.debug and settings.fast2sms_api_key:
+        # 2. Try Fast2SMS if configured
+        if settings.fast2sms_api_key:
             print("Attempting to send OTP via Fast2SMS (OTP Route)...")
             # Fast2SMS requires 10 digit number (remove +91 prefix)
             number = mobile_clean.replace("+91", "")

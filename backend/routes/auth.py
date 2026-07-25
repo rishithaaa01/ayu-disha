@@ -33,10 +33,12 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 router = APIRouter()
 
 class SendOTPRequest(BaseModel):
-    mobile: str
+    mobile: Optional[str] = None
+    email: Optional[str] = None
 
 class VerifyOTPRequest(BaseModel):
-    mobile: str
+    mobile: Optional[str] = None
+    email: Optional[str] = None
     otp: str
     language: str = "en"
     
@@ -120,46 +122,92 @@ async def send_otp(request: SendOTPRequest):
             detail="Database connection is currently unavailable."
         )
     
-    mobile = request.mobile.strip()
-    if not mobile:
-        raise HTTPException(status_code=400, detail="Mobile number is required")
-    
-    # Clean the phone number (remove spaces)
-    mobile = mobile.replace(" ", "")
-    if not mobile.startswith("+"):
-        mobile = "+91" + mobile
+    # Support both mobile and email OTP
+    if request.email:
+        # Email-based OTP
+        email = request.email.strip().lower()
+        if not email:
+            raise HTTPException(status_code=400, detail="Email is required")
         
-    # Generate 6-digit OTP
-    otp_code = f"{random.randint(100000, 999999)}"
-    
-    # Store in database with 5 minute expiration
-    now = datetime.utcnow()
-    expires_at = now + timedelta(minutes=5)
-    
-    # Delete old OTPs for this number
-    await db.otps.delete_many({"mobile": mobile})
-    
-    # Insert new OTP
-    await db.otps.insert_one({
-        "mobile": mobile,
-        "otp": otp_code,
-        "created_at": now,
-        "expires_at": expires_at
-    })
-    
-    # Send OTP via SMS service (uses Twilio or Fast2SMS if configured, else prints to console)
-    sms_res = await sms_service.send_otp(mobile, otp_code)
-    
-    response_data = {
-        "status": "success", 
-        "message": f"OTP sent successfully via {sms_res.get('provider')}"
-    }
-    
-    # Return OTP for testing/development if SMS gateway isn't working/configured and debug is enabled
-    if sms_res.get("provider") == "console" and settings.debug:
-        response_data["otp"] = otp_code
+        # Generate 6-digit OTP
+        otp_code = f"{random.randint(100000, 999999)}"
         
-    return response_data
+        # Store in database with 5 minute expiration
+        now = datetime.utcnow()
+        expires_at = now + timedelta(minutes=5)
+        
+        # Delete old OTPs for this email
+        await db.otps.delete_many({"email": email})
+        
+        # Insert new OTP
+        await db.otps.insert_one({
+            "email": email,
+            "otp": otp_code,
+            "created_at": now,
+            "expires_at": expires_at
+        })
+        
+        # Send OTP via email
+        email_sent = await email_service.send_otp_email(email, otp_code)
+        
+        response_data = {
+            "status": "success",
+            "message": "OTP sent to your email" if email_sent else "OTP generated (check console)",
+            "via": "email"
+        }
+        
+        # Return OTP in development if email not sent
+        if not email_sent and settings.debug:
+            response_data["otp"] = otp_code
+        
+        return response_data
+    
+    elif request.mobile:
+        # Original SMS-based OTP
+        mobile = request.mobile.strip()
+        if not mobile:
+            raise HTTPException(status_code=400, detail="Mobile number is required")
+        
+        # Clean the phone number
+        mobile = mobile.replace(" ", "")
+        if not mobile.startswith("+"):
+            mobile = "+91" + mobile
+            
+        # Generate 6-digit OTP
+        otp_code = f"{random.randint(100000, 999999)}"
+        
+        # Store in database with 5 minute expiration
+        now = datetime.utcnow()
+        expires_at = now + timedelta(minutes=5)
+        
+        # Delete old OTPs for this number
+        await db.otps.delete_many({"mobile": mobile})
+        
+        # Insert new OTP
+        await db.otps.insert_one({
+            "mobile": mobile,
+            "otp": otp_code,
+            "created_at": now,
+            "expires_at": expires_at
+        })
+        
+        # Send OTP via SMS service
+        sms_res = await sms_service.send_otp(mobile, otp_code)
+        
+        response_data = {
+            "status": "success",
+            "message": f"OTP sent successfully via {sms_res.get('provider')}",
+            "via": "sms"
+        }
+        
+        # Return OTP for testing if SMS not configured
+        if sms_res.get("provider") == "console" and settings.debug:
+            response_data["otp"] = otp_code
+            
+        return response_data
+    
+    else:
+        raise HTTPException(status_code=400, detail="Either mobile or email is required")
 
 @router.post("/verify-otp", response_model=VerifyOTPResponse)
 async def verify_otp(request: VerifyOTPRequest):
@@ -170,46 +218,66 @@ async def verify_otp(request: VerifyOTPRequest):
         if db is None:
             raise HTTPException(
                 status_code=503,
-                detail="Database connection is currently unavailable. Please check your network and try again."
+                detail="Database connection is currently unavailable."
             )
-
-        mobile_number = request.mobile.strip().replace(" ", "")
-        if not mobile_number.startswith("+"):
-            mobile_number = "+91" + mobile_number
 
         otp_entered = request.otp.strip()
         print(" Verifying OTP...")
+        
+        # Support both email and mobile OTP
+        if request.email:
+            email = request.email.strip().lower()
+            otp_record = await db.otps.find_one({
+                "email": email,
+                "otp": otp_entered,
+                "expires_at": {"$gt": datetime.utcnow()}
+            })
+            if not otp_record:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid or expired OTP code"
+                )
+            await db.otps.delete_one({"_id": otp_record["_id"]})
+            print(" Email OTP verified and consumed.")
+            
+            # Find or create user by email
+            user = await db.users.find_one({"email": email})
+            identifier = email
+            identifier_field = "email"
+            
+        elif request.mobile:
+            mobile_number = request.mobile.strip().replace(" ", "")
+            if not mobile_number.startswith("+"):
+                mobile_number = "+91" + mobile_number
 
-        otp_record = await db.otps.find_one({
-            "mobile": mobile_number,
-            "otp": otp_entered,
-            "expires_at": {"$gt": datetime.utcnow()}
-        })
-        if not otp_record:
-            print(" Invalid or expired OTP code")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired OTP code"
-            )
-        await db.otps.delete_one({"_id": otp_record["_id"]})
-        print(" OTP verified and consumed.")
+            otp_record = await db.otps.find_one({
+                "mobile": mobile_number,
+                "otp": otp_entered,
+                "expires_at": {"$gt": datetime.utcnow()}
+            })
+            if not otp_record:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid or expired OTP code"
+                )
+            await db.otps.delete_one({"_id": otp_record["_id"]})
+            print(" Mobile OTP verified and consumed.")
             
-        print(" Searching for user in collection 'users'...")
-        try:
+            # Find or create user by mobile
             user = await db.users.find_one({"mobile": mobile_number})
-            print(f" Database search complete. Found: {bool(user)}")
-        except Exception as db_err:
-            print(" Database Search Error")
-            raise HTTPException(status_code=503, detail="Database search timed out or failed")
-            
+            identifier = mobile_number
+            identifier_field = "mobile"
+        else:
+            raise HTTPException(status_code=400, detail="Either mobile or email is required")
+
         is_new_user = False
         
         if not user:
-            print(" Registering new user...")
+            print(f" Registering new user via {identifier_field}...")
             is_new_user = True
             new_user_data = {
                 "name": None,
-                "mobile": mobile_number,
+                identifier_field: identifier,
                 "role": None,
                 "language": request.language or "en",
                 "is_profile_complete": False,
@@ -222,8 +290,7 @@ async def verify_otp(request: VerifyOTPRequest):
                 new_user_data.pop("_id", None)
                 user_response = UserResponse(**new_user_data)
                 print(" New user created")
-            except Exception as ins_err:
-                print(" User Registration Failed")
+            except Exception:
                 raise HTTPException(status_code=500, detail="Failed to create user record")
         else:
             print(" Existing user found")
@@ -235,10 +302,8 @@ async def verify_otp(request: VerifyOTPRequest):
                 if "is_profile_complete" not in user:
                     user["is_profile_complete"] = True if user.get("name") and user.get("role") else False
                 user_response = UserResponse(**user)
-                print(" User response object constructed")
-            except Exception as val_err:
-                print(" User Data Validation Failed")
-                raise HTTPException(status_code=500, detail="Found user data but it's corrupted or incomplete")
+            except Exception:
+                raise HTTPException(status_code=500, detail="Found user data but it's corrupted")
             
         print(" Generating tokens...")
         role_value = str(user_response.role.value) if user_response.role else "none"
@@ -256,8 +321,7 @@ async def verify_otp(request: VerifyOTPRequest):
 
     except HTTPException:
         raise
-    except Exception as global_err:
-        print(" CRITICAL ERROR in verify_otp")
+    except Exception:
         raise HTTPException(
             status_code=500, 
             detail="An unexpected internal error occurred"

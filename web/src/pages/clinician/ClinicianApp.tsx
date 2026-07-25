@@ -56,7 +56,10 @@ export default function ClinicianApp() {
               
               <div className="relative">
                 <button 
-                  onClick={() => setShowNotifications(!showNotifications)}
+                  onClick={() => {
+                    console.log("[Ayu Disha] Clinician Bell clicked. Toggling showNotifications to:", !showNotifications);
+                    setShowNotifications(!showNotifications);
+                  }}
                   className={`relative p-2 hover:bg-[#F7F3EE] rounded-full transition-colors ${showNotifications ? 'bg-[#F7F3EE]' : ''}`}
                 >
                   <Bell size={20} className="text-[#666]" />

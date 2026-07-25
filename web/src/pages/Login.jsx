@@ -15,7 +15,7 @@ export default function Login() {
   
   // Onboarding UI State Control
   const [activeTab, setActiveTab] = useState('login'); // 'login' | 'register'
-  const [loginMethod, setLoginMethod] = useState('password'); // 'password' | 'otp'
+  const [loginMethod, setLoginMethod] = useState('password'); // 'password' | 'otp' | 'email-otp'
   const [step, setStep] = useState(1); // 1: main forms, 2: OTP verification, 3: Forgot Password, 4: Reset Password
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -28,6 +28,7 @@ export default function Login() {
 
   // Passwordless Phone OTP State
   const [phone, setPhone] = useState('');
+  const [emailOTP, setEmailOTP] = useState(''); // For email OTP login
   const [otpArray, setOtpArray] = useState(['', '', '', '', '', '']);
   const [countdown, setCountdown] = useState(0);
   const [canResend, setCanResend] = useState(false);
@@ -242,17 +243,16 @@ export default function Login() {
   };
 
   // Phone OTP Flow — purely backend/JWT based
-  const triggerSendOTP = async (formattedPhone) => {
+  const triggerSendOTP = async (identifier, isEmail = false) => {
     setLoading(true);
     setError('');
     setSuccessMsg('');
     try {
-      const res = await api.post('/auth/send-otp', { mobile: formattedPhone });
+      const payload = isEmail ? { email: identifier } : { mobile: identifier };
+      const res = await api.post('/auth/send-otp', payload);
       let msg = res.data.message || 'OTP sent successfully!';
       if (res.data.otp) {
         msg += ` [DEV MODE - OTP: ${res.data.otp}]`;
-      } else {
-        msg += ' (Check server console logs)';
       }
       setSuccessMsg(msg);
       setCountdown(60);
@@ -267,18 +267,32 @@ export default function Login() {
 
   const handleSendOTP = async (e) => {
     e.preventDefault();
-    if (!phone || phone.length < 10) {
-      setError('Enter a valid 10-digit mobile number');
-      return;
+    if (loginMethod === 'email-otp') {
+      // Email OTP
+      if (!emailOTP || !emailOTP.includes('@')) {
+        setError('Enter a valid email address');
+        return;
+      }
+      await triggerSendOTP(emailOTP, true);
+    } else {
+      // Phone OTP
+      if (!phone || phone.length < 10) {
+        setError('Enter a valid 10-digit mobile number');
+        return;
+      }
+      const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
+      await triggerSendOTP(formattedPhone, false);
     }
-    const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
-    await triggerSendOTP(formattedPhone);
   };
 
   const handleResendOTP = async () => {
     if (!canResend) return;
-    const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
-    await triggerSendOTP(formattedPhone);
+    if (loginMethod === 'email-otp') {
+      await triggerSendOTP(emailOTP, true);
+    } else {
+      const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
+      await triggerSendOTP(formattedPhone, false);
+    }
     setOtpArray(['', '', '', '', '', '']);
     setTimeout(() => {
       document.getElementById('otp-input-0')?.focus();
@@ -294,9 +308,16 @@ export default function Login() {
     }
     setLoading(true);
     setError('');
-    const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
+    
     try {
-      const payload = { mobile: formattedPhone, otp: otpString, language: regLanguage };
+      let payload;
+      if (loginMethod === 'email-otp') {
+        payload = { email: emailOTP, otp: otpString, language: regLanguage };
+      } else {
+        const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
+        payload = { mobile: formattedPhone, otp: otpString, language: regLanguage };
+      }
+      
       const res = await api.post('/auth/verify-otp', payload);
 
       setTempToken(res.data.access_token);
@@ -515,20 +536,41 @@ export default function Login() {
                       <p className="text-gray-400 text-xs mt-1">Configure your login credentials.</p>
                     </div>
                     {/* Switch Login Method */}
-                    <button
-                      onClick={() => setLoginMethod(loginMethod === 'password' ? 'otp' : 'password')}
-                      className="text-xs font-bold text-[#1B6CA8] hover:underline flex items-center gap-1.5"
-                    >
-                      {loginMethod === 'password' ? (
-                        <>
-                          <Phone size={14} /> Log in with Phone OTP
-                        </>
-                      ) : (
-                        <>
-                          <Mail size={14} /> Log in with Password
-                        </>
-                      )}
-                    </button>
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setLoginMethod('password')}
+                        className={`text-xs font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+                          loginMethod === 'password' 
+                            ? 'bg-[#1B6CA8] text-white' 
+                            : 'text-[#1B6CA8] hover:bg-blue-50'
+                        }`}
+                      >
+                        <Lock size={14} /> Password
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLoginMethod('otp')}
+                        className={`text-xs font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+                          loginMethod === 'otp' 
+                            ? 'bg-[#1B6CA8] text-white' 
+                            : 'text-[#1B6CA8] hover:bg-blue-50'
+                        }`}
+                      >
+                        <Phone size={14} /> Phone OTP
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLoginMethod('email-otp')}
+                        className={`text-xs font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+                          loginMethod === 'email-otp' 
+                            ? 'bg-[#1B6CA8] text-white' 
+                            : 'text-[#1B6CA8] hover:bg-blue-50'
+                        }`}
+                      >
+                        <Mail size={14} /> Email OTP
+                      </button>
+                    </div>
                   </div>
 
                   {/* 1. Login with Password */}
@@ -622,6 +664,40 @@ export default function Login() {
                         className="w-full bg-[#1B6CA8] hover:bg-[#155A8A] text-white py-3.5 rounded-xl font-bold text-sm shadow-md transition-all active:scale-[0.99] disabled:opacity-50"
                       >
                         {loading ? 'Sending OTP...' : 'Get OTP Security Code'}
+                      </button>
+                    </form>
+                  )}
+
+                  {/* 3. Login with Email OTP */}
+                  {loginMethod === 'email-otp' && (
+                    <form onSubmit={handleSendOTP} className="space-y-4">
+                      <div className="space-y-2">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-500">Email Address</label>
+                        <div className="relative flex items-center border border-gray-300 rounded-xl bg-white focus-within:ring-2 focus-within:ring-[#1B6CA8] overflow-hidden">
+                          <div className="pl-4 pr-2 text-gray-400">
+                            <Mail size={18} />
+                          </div>
+                          <input
+                            type="email"
+                            value={emailOTP}
+                            onChange={(e) => setEmailOTP(e.target.value)}
+                            placeholder="your.email@example.com"
+                            className="w-full p-3.5 pl-2 outline-none text-sm font-bold text-gray-800"
+                            disabled={loading}
+                            required
+                          />
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          We'll send a 6-digit code to your email
+                        </p>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className="w-full bg-[#1B6CA8] hover:bg-[#155A8A] text-white py-3.5 rounded-xl font-bold text-sm shadow-md transition-all active:scale-[0.99] disabled:opacity-50"
+                      >
+                        {loading ? 'Sending OTP...' : 'Send OTP to Email'}
                       </button>
                     </form>
                   )}
