@@ -15,7 +15,7 @@ export default function Login() {
   
   // Onboarding UI State Control
   const [activeTab, setActiveTab] = useState('login'); // 'login' | 'register'
-  const [loginMethod, setLoginMethod] = useState('password'); // 'password' | 'otp' | 'email-otp'
+  const [loginMethod, setLoginMethod] = useState('password'); // 'password' | 'email-otp'
   const [step, setStep] = useState(1); // 1: main forms, 2: OTP verification, 3: Forgot Password, 4: Reset Password
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -347,12 +347,27 @@ export default function Login() {
     }
     setLoading(true);
     setError('');
+    setSuccessMsg('');
     try {
+      console.log('[FORGOT PASSWORD] Sending request to:', '/auth/forgot-password');
       const res = await api.post('/auth/forgot-password', { email: forgotEmail.trim() });
-      setSuccessMsg(res.data.message || 'Reset code sent successfully!');
+      console.log('[FORGOT PASSWORD] Response:', res.data);
+      
+      let message = res.data.message || 'Reset code sent successfully!';
+      
+      // If backend returns the code (development mode), show it
+      if (res.data.reset_code) {
+        message += ` Code: ${res.data.reset_code}`;
+      }
+      
+      setSuccessMsg(message);
       setStep(4); // Move to Reset Password form
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to submit password reset request.');
+      console.error('[FORGOT PASSWORD] Error:', err);
+      const errorMsg = err.response?.data?.detail || 
+                       err.message || 
+                       'Failed to submit password reset request. Please check your connection.';
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -550,17 +565,6 @@ export default function Login() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setLoginMethod('otp')}
-                        className={`text-xs font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
-                          loginMethod === 'otp' 
-                            ? 'bg-[#1B6CA8] text-white' 
-                            : 'text-[#1B6CA8] hover:bg-blue-50'
-                        }`}
-                      >
-                        <Phone size={14} /> Phone OTP
-                      </button>
-                      <button
-                        type="button"
                         onClick={() => setLoginMethod('email-otp')}
                         className={`text-xs font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
                           loginMethod === 'email-otp' 
@@ -632,43 +636,7 @@ export default function Login() {
                     </form>
                   )}
 
-                  {/* 2. Login with Phone OTP */}
-                  {loginMethod === 'otp' && (
-                    <form onSubmit={handleSendOTP} className="space-y-4">
-                      <div className="space-y-2">
-                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-500">Mobile Number</label>
-                        <div className="relative flex items-center border border-gray-300 rounded-xl bg-white focus-within:ring-2 focus-within:ring-[#1B6CA8] overflow-hidden">
-                          <div className="flex items-center gap-1.5 pl-4 pr-2.5 py-3.5 bg-gray-50 border-r border-gray-100 text-gray-500 font-extrabold text-sm select-none">
-                            <span>🇮🇳</span>
-                            <span>+91</span>
-                          </div>
-                          <div className="pl-3 text-gray-400">
-                            <Phone size={16} />
-                          </div>
-                          <input
-                            type="tel"
-                            value={phone}
-                            onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
-                            placeholder="99999 99999"
-                            className="w-full p-3.5 pl-2.5 outline-none text-sm font-bold text-gray-800 tracking-wide"
-                            maxLength={10}
-                            disabled={loading}
-                            required
-                          />
-                        </div>
-                      </div>
-
-                      <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full bg-[#1B6CA8] hover:bg-[#155A8A] text-white py-3.5 rounded-xl font-bold text-sm shadow-md transition-all active:scale-[0.99] disabled:opacity-50"
-                      >
-                        {loading ? 'Sending OTP...' : 'Get OTP Security Code'}
-                      </button>
-                    </form>
-                  )}
-
-                  {/* 3. Login with Email OTP */}
+                  {/* 2. Login with Email OTP */}
                   {loginMethod === 'email-otp' && (
                     <form onSubmit={handleSendOTP} className="space-y-4">
                       <div className="space-y-2">
