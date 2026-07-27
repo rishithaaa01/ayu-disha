@@ -747,3 +747,15 @@ async def reset_password(request: ResetPasswordRequest):
 
     print(" Password reset successfully")
     return {"status": "success", "message": "Password reset successfully. You can now log in."}
+
+@router.get("/debug/smtp-config")
+async def debug_smtp_config():
+    """Debug endpoint to check SMTP configuration (DO NOT expose in production)"""
+    return {
+        "smtp_host": settings.smtp_host or "NOT SET",
+        "smtp_port": settings.smtp_port or "NOT SET",
+        "smtp_username": settings.smtp_username or "NOT SET",
+        "smtp_password_length": len(settings.smtp_password) if settings.smtp_password else 0,
+        "smtp_sender": settings.smtp_sender or "NOT SET",
+        "smtp_configured": bool(settings.smtp_host and settings.smtp_username and settings.smtp_password)
+    }
