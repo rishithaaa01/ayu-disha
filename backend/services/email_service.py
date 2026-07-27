@@ -100,6 +100,11 @@ class EmailService:
         try:
             sender_email = settings.smtp_sender or settings.smtp_username
             
+            print(f"[SMTP DEBUG] Host: {settings.smtp_host}")
+            print(f"[SMTP DEBUG] Port: {settings.smtp_port}")
+            print(f"[SMTP DEBUG] Username: {settings.smtp_username}")
+            print(f"[SMTP DEBUG] Password Length: {len(settings.smtp_password) if settings.smtp_password else 0}")
+            
             message = MIMEMultipart("alternative")
             message["Subject"] = "Your Ayu Disha Verification Code"
             message["From"] = f"Ayu Disha <{sender_email}>"
@@ -122,16 +127,27 @@ class EmailService:
             
             message.attach(MIMEText(html, "html"))
             
+            print("[SMTP DEBUG] Connecting to SMTP server...")
             with smtplib.SMTP(settings.smtp_host, settings.smtp_port or 587, timeout=10.0) as server:
+                print("[SMTP DEBUG] Starting TLS...")
                 server.starttls()
+                print("[SMTP DEBUG] Logging in...")
                 server.login(settings.smtp_username, settings.smtp_password)
+                print("[SMTP DEBUG] Sending email...")
                 server.sendmail(sender_email, to_email, message.as_string())
             
             print(f"✅ OTP email sent via SMTP to {to_email}")
             return True
             
+        except smtplib.SMTPAuthenticationError as e:
+            print(f"❌ SMTP Authentication Failed: {str(e)}")
+            return False
+        except smtplib.SMTPException as e:
+            print(f"❌ SMTP Error: {str(e)}")
+            return False
         except Exception as e:
             print(f"❌ SMTP OTP error: {str(e)}")
+            print(f"   Error type: {type(e).__name__}")
             return False
 
     async def send_reset_code(self, to_email: str, reset_code: str) -> bool:
@@ -152,6 +168,12 @@ class EmailService:
     def _send_email_sync(self, to_email: str, reset_code: str) -> bool:
         try:
             sender_email = settings.smtp_sender or settings.smtp_username
+            
+            print(f"[SMTP DEBUG] Host: {settings.smtp_host}")
+            print(f"[SMTP DEBUG] Port: {settings.smtp_port}")
+            print(f"[SMTP DEBUG] Username: {settings.smtp_username}")
+            print(f"[SMTP DEBUG] Password Length: {len(settings.smtp_password) if settings.smtp_password else 0}")
+            print(f"[SMTP DEBUG] Sender: {sender_email}")
             
             message = MIMEMultipart("alternative")
             message["Subject"] = "Ayu Disha - Password Reset Code"
@@ -184,16 +206,28 @@ class EmailService:
             message.attach(part1)
             message.attach(part2)
 
+            print("[SMTP DEBUG] Connecting to SMTP server...")
             # Connect and send with a 10s timeout
             with smtplib.SMTP(settings.smtp_host, settings.smtp_port or 587, timeout=10.0) as server:
+                print("[SMTP DEBUG] Starting TLS...")
                 server.starttls()
+                print("[SMTP DEBUG] Logging in...")
                 server.login(settings.smtp_username, settings.smtp_password)
+                print("[SMTP DEBUG] Sending email...")
                 server.sendmail(sender_email, to_email, message.as_string())
                 
-            print(" Password reset email sent successfully")
+            print("✅ Password reset email sent successfully")
             return True
+        except smtplib.SMTPAuthenticationError as e:
+            print(f"❌ SMTP Authentication Failed: {str(e)}")
+            print(f"   Check your Gmail app password is correct")
+            return False
+        except smtplib.SMTPException as e:
+            print(f"❌ SMTP Error: {str(e)}")
+            return False
         except Exception as e:
-            print(" Failed to send reset email")
+            print(f"❌ Failed to send reset email: {str(e)}")
+            print(f"   Error type: {type(e).__name__}")
             return False
 
 email_service = EmailService()
