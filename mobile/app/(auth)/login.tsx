@@ -10,7 +10,7 @@ type Role = 'patient' | 'asha' | 'doctor';
 
 export default function LoginScreen() {
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
-  const [loginMethod, setLoginMethod] = useState<'password' | 'email-otp'>('password');
+  const [loginMethod, setLoginMethod] = useState<'password' | 'email-otp'>('email-otp'); // Changed default to email-otp
   const [loading, setLoading] = useState(false);
   const [metaLoading, setMetaLoading] = useState(true);
   const [otpSent, setOtpSent] = useState(false);
