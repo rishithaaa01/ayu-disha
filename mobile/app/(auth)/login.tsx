@@ -10,12 +10,19 @@ type Role = 'patient' | 'asha' | 'doctor';
 
 export default function LoginScreen() {
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
+  const [loginMethod, setLoginMethod] = useState<'password' | 'email-otp'>('password');
   const [loading, setLoading] = useState(false);
   const [metaLoading, setMetaLoading] = useState(true);
+  const [otpSent, setOtpSent] = useState(false);
 
-  // Sign In States
+  // Password Login States
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+
+  // Email OTP States
+  const [otpEmail, setOtpEmail] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [countdown, setCountdown] = useState(0);
 
   // Sign Up States
   const [regName, setRegName] = useState('');
@@ -36,6 +43,15 @@ export default function LoginScreen() {
   useEffect(() => {
     loadMetaData();
   }, []);
+
+  // Countdown timer for OTP
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (countdown > 0) {
+      timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [countdown]);
 
   const loadMetaData = async () => {
     try {
@@ -75,6 +91,51 @@ export default function LoginScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSendEmailOTP = async () => {
+    if (!otpEmail.trim() || !otpEmail.includes('@')) {
+      return Alert.alert("Invalid Email", "Please enter a valid email address.");
+    }
+    setLoading(true);
+    try {
+      await api.post('/auth/send-otp', { email: otpEmail.trim().toLowerCase() });
+      setOtpSent(true);
+      setCountdown(60);
+      Alert.alert("Success", "OTP sent to your email. Please check your inbox.");
+    } catch (err: any) {
+      console.error(err);
+      const msg = err.response?.data?.detail || "Failed to send OTP. Please try again.";
+      Alert.alert("OTP Error", msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyEmailOTP = async () => {
+    if (!otpCode.trim() || otpCode.length !== 6) {
+      return Alert.alert("Invalid OTP", "Please enter the 6-digit OTP code.");
+    }
+    setLoading(true);
+    try {
+      const res = await api.post('/auth/verify-otp', {
+        email: otpEmail.trim().toLowerCase(),
+        otp: otpCode.trim(),
+        language: 'en'
+      });
+      await handleSuccessfulLogin(res.data.user, res.data.access_token, res.data.refresh_token);
+    } catch (err: any) {
+      console.error(err);
+      const msg = err.response?.data?.detail || "Invalid OTP. Please try again.";
+      Alert.alert("Verification Failed", msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOTP = async () => {
+    if (countdown > 0) return;
+    await handleSendEmailOTP();
   };
 
   const handleRegister = async () => {
@@ -143,54 +204,148 @@ export default function LoginScreen() {
       {/* A. LOGIN TAB */}
       {activeTab === 'login' && (
         <View style={styles.form}>
-          <Text style={styles.label}>Email Address</Text>
-          <View style={styles.inputBox}>
-            <Ionicons name="mail-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. doctor@ayudisha.org"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              editable={!loading}
-            />
-          </View>
-
-          <Text style={styles.label}>Password</Text>
-          <View style={styles.inputBox}>
-            <Ionicons name="lock-closed-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="••••••••"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoCapitalize="none"
-              editable={!loading}
-            />
-          </View>
-
-          <TouchableOpacity
-            style={[styles.primaryButton, loading && styles.disabledButton]}
-            onPress={handleCredentialsLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color={Colors.white} />
-            ) : (
-              <Text style={styles.primaryButtonText}>Log In to Workspace</Text>
-            )}
-          </TouchableOpacity>
-
-          <View style={styles.secondaryRow}>
-            <TouchableOpacity onPress={() => router.push('/(auth)/forgot')}>
-              <Text style={styles.secondaryLink}>Forgot Password?</Text>
+          {/* Login Method Toggle */}
+          <View style={styles.methodRow}>
+            <TouchableOpacity
+              style={[styles.methodButton, loginMethod === 'password' && styles.activeMethod]}
+              onPress={() => { setLoginMethod('password'); setOtpSent(false); }}
+            >
+              <Ionicons name="lock-closed" size={16} color={loginMethod === 'password' ? Colors.white : Colors.primary} />
+              <Text style={[styles.methodText, loginMethod === 'password' && styles.activeMethodText]}>Password</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/(auth)/phone')}>
-              <Text style={styles.secondaryLink}>Sign in with Phone OTP</Text>
+            <TouchableOpacity
+              style={[styles.methodButton, loginMethod === 'email-otp' && styles.activeMethod]}
+              onPress={() => { setLoginMethod('email-otp'); setOtpSent(false); }}
+            >
+              <Ionicons name="mail" size={16} color={loginMethod === 'email-otp' ? Colors.white : Colors.primary} />
+              <Text style={[styles.methodText, loginMethod === 'email-otp' && styles.activeMethodText]}>Email OTP</Text>
             </TouchableOpacity>
           </View>
+
+          {/* 1. Password Login */}
+          {loginMethod === 'password' && (
+            <>
+              <Text style={styles.label}>Email Address</Text>
+              <View style={styles.inputBox}>
+                <Ionicons name="mail-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. doctor@ayudisha.org"
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  editable={!loading}
+                />
+              </View>
+
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.inputBox}>
+                <Ionicons name="lock-closed-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="••••••••"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  editable={!loading}
+                />
+              </View>
+
+              <TouchableOpacity
+                style={[styles.primaryButton, loading && styles.disabledButton]}
+                onPress={handleCredentialsLogin}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={Colors.white} />
+                ) : (
+                  <Text style={styles.primaryButtonText}>Log In to Workspace</Text>
+                )}
+              </TouchableOpacity>
+
+              <View style={styles.secondaryRow}>
+                <TouchableOpacity onPress={() => router.push('/(auth)/forgot')}>
+                  <Text style={styles.secondaryLink}>Forgot Password?</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+
+          {/* 2. Email OTP Login */}
+          {loginMethod === 'email-otp' && !otpSent && (
+            <>
+              <Text style={styles.label}>Email Address</Text>
+              <View style={styles.inputBox}>
+                <Ionicons name="mail-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter your email"
+                  value={otpEmail}
+                  onChangeText={setOtpEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  editable={!loading}
+                />
+              </View>
+
+              <TouchableOpacity
+                style={[styles.primaryButton, loading && styles.disabledButton]}
+                onPress={handleSendEmailOTP}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={Colors.white} />
+                ) : (
+                  <Text style={styles.primaryButtonText}>Send OTP to Email</Text>
+                )}
+              </TouchableOpacity>
+            </>
+          )}
+
+          {/* 3. OTP Verification Screen */}
+          {loginMethod === 'email-otp' && otpSent && (
+            <>
+              <Text style={styles.label}>Enter 6-Digit OTP</Text>
+              <Text style={styles.helperText}>We sent a code to {otpEmail}</Text>
+              <View style={styles.inputBox}>
+                <Ionicons name="key-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="000000"
+                  value={otpCode}
+                  onChangeText={setOtpCode}
+                  keyboardType="numeric"
+                  maxLength={6}
+                  editable={!loading}
+                />
+              </View>
+
+              <TouchableOpacity
+                style={[styles.primaryButton, loading && styles.disabledButton]}
+                onPress={handleVerifyEmailOTP}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={Colors.white} />
+                ) : (
+                  <Text style={styles.primaryButtonText}>Verify & Login</Text>
+                )}
+              </TouchableOpacity>
+
+              <View style={styles.secondaryRow}>
+                <TouchableOpacity onPress={() => setOtpSent(false)}>
+                  <Text style={styles.secondaryLink}>← Change Email</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleResendOTP} disabled={countdown > 0}>
+                  <Text style={[styles.secondaryLink, countdown > 0 && styles.disabledLink]}>
+                    {countdown > 0 ? `Resend in ${countdown}s` : 'Resend OTP'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </View>
       )}
 
@@ -505,5 +660,45 @@ const styles = StyleSheet.create({
   locationText: {
     fontSize: 14,
     color: Colors.textDark,
+  },
+  methodRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 24,
+    backgroundColor: Colors.white,
+    padding: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  methodButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: 'transparent',
+  },
+  activeMethod: {
+    backgroundColor: Colors.primary,
+  },
+  methodText: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: Colors.primary,
+  },
+  activeMethodText: {
+    color: Colors.white,
+  },
+  helperText: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    marginBottom: 12,
+    marginTop: -8,
+  },
+  disabledLink: {
+    opacity: 0.5,
   },
 });
