@@ -79,13 +79,21 @@ export default function LoginScreen() {
     }
     setLoading(true);
     try {
+      console.log('[LOGIN] Attempting login with email:', email.trim().toLowerCase());
+      console.log('[LOGIN] API URL:', Config.API_URL);
+      
       const res = await api.post('/auth/login', {
         email: email.trim().toLowerCase(),
         password: password
       });
+      
+      console.log('[LOGIN] Success! User:', res.data.user);
       await handleSuccessfulLogin(res.data.user, res.data.access_token, res.data.refresh_token);
     } catch (err: any) {
-      console.error(err);
+      console.error('[LOGIN] Error:', err);
+      console.error('[LOGIN] Error response:', err.response?.data);
+      console.error('[LOGIN] Error status:', err.response?.status);
+      
       const msg = err.response?.data?.detail || "Invalid credentials. Please try again.";
       Alert.alert("Login Failed", msg);
     } finally {

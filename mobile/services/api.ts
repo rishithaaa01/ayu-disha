@@ -6,7 +6,10 @@ import { Config } from '../constants/Config';
 const api = axios.create({
   // Use http://10.0.2.2:8000/api if running on Android Emulator locally
   baseURL: Config.API_URL,
-  timeout: 15000,
+  timeout: 30000, // Increased from 15s to 30s
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
 api.interceptors.request.use(async (config) => {
