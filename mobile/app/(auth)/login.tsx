@@ -79,29 +79,23 @@ export default function LoginScreen() {
     }
     setLoading(true);
     try {
-      console.log('[LOGIN] Attempting login with email:', email.trim().toLowerCase());
-      console.log('[LOGIN] API URL:', Config.API_URL);
-      console.log('[LOGIN] Full endpoint:', `${Config.API_URL}/auth/login`);
+      console.log('[LOGIN] Attempting login...');
       
       const res = await api.post('/auth/login', {
         email: email.trim().toLowerCase(),
         password: password
       });
       
-      console.log('[LOGIN] Success! User:', res.data.user);
+      console.log('[LOGIN] Success!');
       await handleSuccessfulLogin(res.data.user, res.data.access_token, res.data.refresh_token);
     } catch (err: any) {
-      console.error('[LOGIN] Error object:', JSON.stringify({
+      console.error('[LOGIN] Error:', JSON.stringify({
         message: err.message,
-        code: err.code,
         status: err.response?.status,
-        statusText: err.response?.statusText,
         data: err.response?.data,
-        url: err.config?.url,
-        method: err.config?.method
       }, null, 2));
       
-      let msg = "Network error. Please check your internet connection.";
+      let msg = "Unable to login. Please check your credentials.";
       
       if (err.response?.data?.detail) {
         msg = err.response.data.detail;
