@@ -49,6 +49,10 @@ async def radar_middleware(request: Request, call_next):
 
 # Setup CORS (Must be registered last to wrap all other middleware)
 origins = [o.strip() for o in settings.allowed_origins.split(",") if o.strip()]
+# Add wildcard for mobile apps (Expo Go uses dynamic origins)
+if "*" not in origins:
+    origins.append("*")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,

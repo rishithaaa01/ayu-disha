@@ -10,12 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.ayudisha.mobile",
-      "googleServicesFile": "./GoogleService-Info.plist"
+      "bundleIdentifier": "com.ayudisha.mobile"
     },
     "android": {
       "package": "com.ayudisha.mobile",
-      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
