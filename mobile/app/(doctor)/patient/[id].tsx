@@ -128,12 +128,23 @@ export default function PatientDetail() {
             
             <Text style={styles.fieldFindingsTitle}>Field Findings:</Text>
             <View style={styles.findingsGrid}>
-              {Object.entries(record.active_referral.asha_observations || {}).map(([key, val]: any) => (
-                <View key={key} style={styles.findingItem}>
-                  <Text style={styles.findingLabel}>• {key.replace(/_/g, ' ')}: </Text>
-                  <Text style={styles.findingValue}>{String(val)}</Text>
-                </View>
-              ))}
+              {(() => {
+                try {
+                  // Parse asha_observations if it's a string
+                  const observations = typeof record.active_referral.asha_observations === 'string'
+                    ? JSON.parse(record.active_referral.asha_observations)
+                    : record.active_referral.asha_observations || {};
+                  
+                  return Object.entries(observations).map(([key, val]: any) => (
+                    <View key={key} style={styles.findingItem}>
+                      <Text style={styles.findingLabel}>• {key.replace(/_/g, ' ')}: </Text>
+                      <Text style={styles.findingValue}>{String(val)}</Text>
+                    </View>
+                  ));
+                } catch (e) {
+                  return <Text style={styles.findingValue}>No field findings recorded</Text>;
+                }
+              })()}
             </View>
             
             <View style={styles.ashaNoteBox}>
