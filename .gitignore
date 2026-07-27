@@ -1,6 +1,7 @@
 # Environments (NEVER commit these)
 .env
 .env.*
+*.env
 !.env.example
 .venv
 env/
@@ -14,6 +15,22 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+
+# Test and debug scripts with credentials
+test_smtp_connection.py
+create_test_user.py
+delete_test_user.py
+
+# Temporary documentation files (keep only README.md and SECURITY.md)
+*_CHECKLIST.md
+*_DIAGNOSTIC.md
+*_FIXED.md
+*_FIX.md
+*_FIXES.md
+*_GUIDE.md
+*_SETUP.md
+*_STEPS.md
+*_NOW.md
 
 # Node
 node_modules/
