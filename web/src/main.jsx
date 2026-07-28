@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import './index.css'
 import App from './App.jsx'
+import { initializeCapacitor } from './capacitor'
 
 console.log('📦 main.jsx executing...');
 
@@ -15,6 +16,11 @@ const queryClient = new QueryClient({
     },
   },
 })
+
+// Initialize Capacitor for mobile
+initializeCapacitor().then((isNative) => {
+  console.log(isNative ? '📱 Running as native mobile app' : '🌐 Running in web browser');
+});
 
 console.log('🔍 Looking for root element...');
 const rootElement = document.getElementById('root');
