@@ -162,6 +162,10 @@ export default function HomeScreen() {
             <MaterialCommunityIcons name="shield-check" size={32} color="#1B6CA8" />
             <Text style={styles.actionLabel}>Consents</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.actionBtn} onPress={() => router.push('/(patient)/profile')}>
+            <MaterialCommunityIcons name="account-circle" size={32} color="#1B6CA8" />
+            <Text style={styles.actionLabel}>My Profile</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Upcoming Follow Up or Recent Visit */}
