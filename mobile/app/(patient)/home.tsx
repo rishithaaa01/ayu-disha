@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import * as Speech from 'expo-speech';
 import patientApi from '../../services/patientApi';
@@ -50,6 +50,13 @@ export default function HomeScreen() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Reload data when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      loadData();
+    }, [])
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -131,6 +138,14 @@ export default function HomeScreen() {
 
         {/* Quick Actions */}
         <View style={styles.actionsGrid}>
+          <TouchableOpacity style={styles.actionBtn} onPress={() => router.push('/(patient)/book-appointment')}>
+            <MaterialCommunityIcons name="calendar-plus" size={32} color="#1B6CA8" />
+            <Text style={styles.actionLabel}>Book Appointment</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionBtn} onPress={() => router.push('/(patient)/appointments')}>
+            <MaterialCommunityIcons name="calendar-check" size={32} color="#1B6CA8" />
+            <Text style={styles.actionLabel}>My Appointments</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.actionBtn} onPress={() => router.push('/(patient)/records')}>
             <MaterialCommunityIcons name="folder-text" size={32} color="#1B6CA8" />
             <Text style={styles.actionLabel}>My Records</Text>

@@ -10,7 +10,7 @@ import {
   TouchableOpacity
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useClinicianStore } from '../../store/clinicianStore';
 import clinicianApi from '../../services/clinicianApi';
 import QueueCard from '../../components/QueueCard';
@@ -40,6 +40,14 @@ export default function DoctorDashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  // Reload data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      refreshUser();
+      fetchQueue();
+    }, [])
+  );
+
   const stats = {
     urgent: queue.filter(p => p.risk_tag === 'urgent').length,
     watch: queue.filter(p => p.risk_tag === 'watch').length,
@@ -53,10 +61,15 @@ export default function DoctorDashboard() {
           <Text style={styles.welcomeText}>Namaste, Doctor</Text>
           <Text style={styles.nameText}>{doctor?.name || '—'}</Text>
         </View>
-        <TouchableOpacity style={styles.notifButton}>
-          <Ionicons name="notifications-outline" size={24} color="#1B6CA8" />
-          <View style={styles.notifDot} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          <TouchableOpacity style={styles.appointmentsButton} onPress={() => router.push('/(doctor)/appointments')}>
+            <Ionicons name="calendar-outline" size={20} color="#1B6CA8" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.notifButton}>
+            <Ionicons name="notifications-outline" size={24} color="#1B6CA8" />
+            <View style={styles.notifDot} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.statsContainer}>
@@ -147,6 +160,16 @@ const styles = StyleSheet.create({
     fontFamily: 'Mukta_800ExtraBold',
   },
   notifButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  appointmentsButton: {
     width: 48,
     height: 48,
     borderRadius: 24,
