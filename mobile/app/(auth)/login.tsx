@@ -6,11 +6,11 @@ import api from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { Colors } from '../../constants/colors';
 
-type Role = 'patient' | 'asha' | 'doctor';
+type Role = 'patient' | 'asha' | 'doctor' | 'admin' | 'pho' | 'lab';
 
 export default function LoginScreen() {
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
-  const [loginMethod, setLoginMethod] = useState<'password' | 'email-otp'>('email-otp'); // Changed default to email-otp
+  const [loginMethod, setLoginMethod] = useState<'password' | 'email-otp'>('password'); // Match web default
   const [loading, setLoading] = useState(false);
   const [metaLoading, setMetaLoading] = useState(true);
   const [otpSent, setOtpSent] = useState(false);
@@ -70,7 +70,30 @@ export default function LoginScreen() {
 
   const handleSuccessfulLogin = async (user: any, token: string, refreshToken?: string) => {
     await loginState(user, token, refreshToken);
-    router.replace('/');
+    
+    // Role-based navigation matching web implementation
+    switch (user.role) {
+      case 'patient':
+        router.replace('/(patient)/home');
+        break;
+      case 'asha':
+        router.replace('/(asha)/home');
+        break;
+      case 'doctor':
+        router.replace('/(doctor)/home');
+        break;
+      case 'admin':
+        router.replace('/(admin)/home');
+        break;
+      case 'pho':
+        router.replace('/(pho)/home');
+        break;
+      case 'lab':
+        router.replace('/(lab)/home');
+        break;
+      default:
+        router.replace('/');
+    }
   };
 
   const handleCredentialsLogin = async () => {
@@ -158,8 +181,11 @@ export default function LoginScreen() {
     if (!regName.trim() || !regEmail.trim() || !regPassword.trim() || !regPhone.trim()) {
       return Alert.alert("Required", "Please fill in all registration fields.");
     }
-    if (regRole !== 'patient' && (regRole === 'doctor' ? !regHospital : !regVillage)) {
-      return Alert.alert("Required", `Please select your assigned ${regRole === 'doctor' ? 'hospital' : 'village'}`);
+    if ((regRole === 'doctor' || regRole === 'lab') && !regHospital) {
+      return Alert.alert("Required", "Please select your assigned hospital");
+    }
+    if (regRole === 'asha' && !regVillage) {
+      return Alert.alert("Required", "Please select your assigned village");
     }
 
     setLoading(true);
@@ -172,7 +198,7 @@ export default function LoginScreen() {
         role: regRole,
         language: 'en',
         district: regDistrict,
-        hospital: regRole === 'doctor' ? regHospital : null,
+        hospital: (regRole === 'doctor' || regRole === 'lab') ? regHospital : null,
         village: regRole === 'asha' ? regVillage : null
       };
       const res = await api.post('/auth/register', payload);
@@ -197,7 +223,12 @@ export default function LoginScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView 
+      style={styles.container} 
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
       <Text style={styles.logo}>Ayu Disha</Text>
       <Text style={styles.tagline}>Clinic-OS Portal</Text>
 
@@ -424,29 +455,52 @@ export default function LoginScreen() {
 
           {/* Role Selection */}
           <Text style={styles.label}>Workspace Role</Text>
-          <View style={styles.roleRow}>
-            {(['patient', 'asha', 'doctor'] as Role[]).map((r) => (
-              <TouchableOpacity
-                key={r}
-                style={[styles.roleCard, regRole === r && styles.activeRole]}
-                onPress={() => { setRegRole(r); setRegHospital(''); setRegVillage(''); }}
-              >
-                <Ionicons 
-                  name={r === 'patient' ? 'person' : r === 'asha' ? 'home' : 'medical'} 
-                  size={20} 
-                  color={regRole === r ? Colors.white : Colors.textDark} 
-                />
-                <Text style={[styles.roleLabel, regRole === r && { color: Colors.white }]}>
-                  {r.toUpperCase()}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          <View style={styles.roleContainer}>
+            <View style={styles.roleRow}>
+              {(['patient', 'asha', 'doctor'] as Role[]).map((r) => (
+                <TouchableOpacity
+                  key={r}
+                  style={[styles.roleCard, regRole === r && styles.activeRole]}
+                  onPress={() => { setRegRole(r); setRegHospital(''); setRegVillage(''); }}
+                >
+                  <Ionicons 
+                    name={r === 'patient' ? 'person' : r === 'asha' ? 'home' : 'medical'} 
+                    size={18} 
+                    color={regRole === r ? Colors.white : Colors.textDark} 
+                  />
+                  <Text style={[styles.roleLabel, regRole === r && { color: Colors.white }]}>
+                    {r.charAt(0).toUpperCase() + r.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.roleRow}>
+              {(['admin', 'pho', 'lab'] as Role[]).map((r) => (
+                <TouchableOpacity
+                  key={r}
+                  style={[styles.roleCard, regRole === r && styles.activeRole]}
+                  onPress={() => { setRegRole(r); setRegHospital(''); setRegVillage(''); }}
+                >
+                  <Ionicons 
+                    name={r === 'admin' ? 'shield' : r === 'pho' ? 'map' : 'flask'} 
+                    size={18} 
+                    color={regRole === r ? Colors.white : Colors.textDark} 
+                  />
+                  <Text style={[styles.roleLabel, regRole === r && { color: Colors.white }]}>
+                    {r.toUpperCase()}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
 
           {/* Conditional Hospital Selector */}
-          {regRole === 'doctor' && (
+          {(regRole === 'doctor' || regRole === 'lab') && (
             <View style={styles.section}>
               <Text style={styles.label}>Select Clinical Hospital</Text>
+              {hospitals.length === 0 && (
+                <Text style={styles.helperText}>No hospitals available. Contact admin.</Text>
+              )}
               {hospitals.map(h => (
                 <TouchableOpacity 
                   key={h.id} 
@@ -511,6 +565,7 @@ const styles = StyleSheet.create({
   content: {
     padding: 24,
     paddingTop: 64,
+    paddingBottom: 40,
   },
   logo: {
     fontSize: 36,
@@ -552,7 +607,7 @@ const styles = StyleSheet.create({
     color: Colors.textDark,
   },
   form: {
-    gap: 16,
+    gap: 12,
   },
   label: {
     fontSize: 12,
@@ -561,7 +616,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginBottom: 6,
-    marginTop: 12,
+    marginTop: 8,
   },
   inputBox: {
     flexDirection: 'row',
@@ -571,7 +626,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     borderRadius: 10,
     height: 48,
-    marginBottom: 16,
+    marginBottom: 8,
   },
   inputIcon: {
     paddingHorizontal: 12,
@@ -592,10 +647,10 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     backgroundColor: Colors.primary,
-    padding: 16,
+    padding: 14,
     borderRadius: 10,
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 12,
     shadowColor: Colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
@@ -613,8 +668,8 @@ const styles = StyleSheet.create({
   secondaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 20,
-    marginBottom: 32,
+    marginTop: 12,
+    marginBottom: 20,
   },
   secondaryLink: {
     fontSize: 14,
@@ -634,15 +689,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  roleContainer: {
+    marginBottom: 8,
+    gap: 8,
+  },
   roleRow: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
+    gap: 8,
   },
   roleCard: {
     flex: 1,
     backgroundColor: Colors.white,
-    padding: 12,
+    padding: 10,
     borderRadius: 10,
     alignItems: 'center',
     borderWidth: 1,
@@ -653,19 +711,19 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
   },
   roleLabel: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: 'bold',
-    marginTop: 6,
+    marginTop: 4,
     color: Colors.textDark,
   },
   section: {
-    marginBottom: 16,
+    marginBottom: 8,
   },
   locationItem: {
     backgroundColor: Colors.white,
-    padding: 12,
+    padding: 10,
     borderRadius: 8,
-    marginBottom: 6,
+    marginBottom: 4,
     borderWidth: 1,
     borderColor: Colors.border,
   },

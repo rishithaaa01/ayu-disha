@@ -187,14 +187,14 @@ export default function VisitFlowScreen() {
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
         `, [
           String(household_id), 
-          String(member_name || 'Patient'), 
+          String(member_id || member_name || 'Patient'), 
           String(visitType || 'general'), 
           String(JSON.stringify(answers)), 
           String(voiceTranscript || ''), 
           String(result.risk_level || 'WATCH'), 
           String(result.reasoning || ''), 
           String(result.recommendation || ''),
-          String(offlineAudioUri),
+          String(offlineAudioUri || ''),
           0
         ]);
 

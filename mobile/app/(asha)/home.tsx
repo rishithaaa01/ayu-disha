@@ -4,7 +4,7 @@ import {
   TouchableOpacity, ActivityIndicator, RefreshControl
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuthStore } from '../../store/authStore';
 import { getMyStats, getHouseholds } from '../../services/ashaApi';
 import SyncIndicator from '../../components/SyncIndicator';
@@ -53,6 +53,13 @@ export default function AshaHomeScreen() {
   };
 
   useEffect(() => { loadData(); }, []);
+
+  // Reload data when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      loadData();
+    }, [])
+  );
 
   const onRefresh = () => { setRefreshing(true); loadData(); };
 

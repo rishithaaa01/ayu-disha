@@ -5,5 +5,8 @@
     "build": "cd web && npm install && npm run build",
     "dev": "cd web && npm run dev",
     "start": "cd web && npm run preview"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.2"
   }
 }

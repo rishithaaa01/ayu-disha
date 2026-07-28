@@ -7,6 +7,7 @@ import uuid
 from collections import defaultdict
 from fastapi import APIRouter, Depends, HTTPException, Request, status, File, UploadFile
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from typing import List, Dict, Any
 from datetime import datetime, timedelta
 from database import get_database
@@ -100,11 +101,25 @@ async def get_household(household_id: str, current_user: UserResponse = Depends(
 async def submit_visit(visit: VisitCreate, current_user: UserResponse = Depends(get_current_user)):
     db = get_database()
     
+    # DEBUG LOGGING
+    print(f"[VISIT DEBUG] Received visit submission from ASHA {current_user.id}")
+    print(f"[VISIT DEBUG] household_id: {visit.household_id} (type: {type(visit.household_id)})")
+    print(f"[VISIT DEBUG] member_id: {visit.member_id} (type: {type(visit.member_id)})")
+    print(f"[VISIT DEBUG] observations: {visit.observations} (type: {type(visit.observations)})")
+    print(f"[VISIT DEBUG] risk_level: {visit.risk_level}")
+    
     # Verify household exists and belongs to this ASHA worker
-    hh = await db.households.find_one({"_id": safe_object_id(visit.household_id)})
+    try:
+        hh = await db.households.find_one({"_id": safe_object_id(visit.household_id)})
+    except HTTPException as e:
+        print(f"[VISIT DEBUG] Invalid household_id format: {visit.household_id}")
+        raise HTTPException(status_code=400, detail=f"Invalid household_id format: {visit.household_id}")
+    
     if not hh:
+        print(f"[VISIT DEBUG] Household not found: {visit.household_id}")
         raise HTTPException(status_code=404, detail="Household not found")
     if hh.get("created_by") != current_user.id:
+        print(f"[VISIT DEBUG] Access denied: household belongs to {hh.get('created_by')}, not {current_user.id}")
         raise HTTPException(status_code=403, detail="Access denied to this household")
 
     # Normalise risk_level — accept URGENT/urgent/red, WATCH/watch/amber, LOW/low/green
