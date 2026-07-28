@@ -66,33 +66,107 @@ export const syncService = {
       // ── SYNC VISITS one by one ──
       for (const v of unsyncedVisits) {
         try {
+          // Validate required fields first
+          if (!v.household_id || !v.member_id) {
+            console.error(`⚠️ Visit ${v.id} missing required fields:`, { 
+              household_id: v.household_id, 
+              member_id: v.member_id 
+            });
+            continue;
+          }
+
           // Parse observations — handle both string and already-parsed object
           let observations = v.observations_json;
           if (typeof observations === 'string') {
-            try { observations = JSON.parse(observations); } catch { observations = { raw: observations }; }
+            try { 
+              observations = JSON.parse(observations); 
+            } catch (parseError) { 
+              console.warn(`Cannot parse observations for visit ${v.id}, using empty object. Raw value:`, observations);
+              observations = {}; 
+            }
+          }
+          
+          // Ensure observations is an object (not array, not null, not undefined)
+          if (!observations || typeof observations !== 'object' || Array.isArray(observations)) {
+            console.warn(`Visit ${v.id} observations is not a valid object. Type: ${typeof observations}, Value:`, observations);
+            observations = {};
           }
 
-          await axios.post(
+          console.log(`[SYNC DEBUG] Visit ${v.id} observations parsed:`, observations);
+
+          // Ensure household_id and member_id are valid strings
+          const householdId = String(v.household_id).trim();
+          const memberId = String(v.member_id).trim();
+
+          if (householdId === 'undefined' || householdId === 'null' || householdId === '') {
+            console.error(`⚠️ Visit ${v.id} has invalid household_id: "${v.household_id}"`);
+            continue;
+          }
+
+          if (memberId === 'undefined' || memberId === 'null' || memberId === '') {
+            console.error(`⚠️ Visit ${v.id} has invalid member_id: "${v.member_id}"`);
+            continue;
+          }
+
+          const payload = {
+            household_id:      householdId,
+            member_id:         memberId,
+            visit_type:        v.visit_type || 'general',
+            observations:      observations,
+            voice_notes:       v.voice_notes || '',
+            risk_level:        v.risk_level || 'WATCH',
+            ai_reasoning:      v.ai_reasoning || 'Routine checkup',
+            ai_recommendation: v.ai_recommendation || 'Monitor condition',
+          };
+
+          console.log(`[SYNC] Sending visit ${v.id} to backend...`);
+          console.log(`[SYNC] Payload:`, {
+            household_id: householdId,
+            member_id: memberId,
+            visit_type: v.visit_type || 'general',
+            observations: observations,
+            observations_is_object: typeof observations === 'object' && !Array.isArray(observations)
+          });
+
+          const response = await axios.post(
             `${API_URL}/asha/visits`,
-            {
-              household_id:     v.household_id,
-              member_id:        v.member_id,
-              visit_type:       v.visit_type,
-              observations:     observations,
-              voice_notes:      v.voice_notes || '',
-              risk_level:       v.risk_level || 'WATCH',
-              ai_reasoning:     v.ai_reasoning || '',
-              ai_recommendation:v.ai_recommendation || '',
-            },
-            { headers: { Authorization: `Bearer ${token}` }, timeout: 15000 }
+            payload,
+            { 
+              headers: { 
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }, 
+              timeout: 30000 
+            }
           );
+          
           await db.runAsync(
             'UPDATE asha_visits SET synced = 1 WHERE id = ?',
             [v.id]
           );
-          console.log(`✅ Visit synced: id=${v.id}`);
+          console.log(`✅ Visit synced: id=${v.id}, backend response:`, response.data);
         } catch (err: any) {
-          console.warn(`⚠️ Visit sync failed (id=${v.id}):`, err.message);
+          const errorDetails = err.response?.data || err.message;
+          console.error(`⚠️ Visit sync failed (id=${v.id}):`, errorDetails);
+          
+          // Log full error details for debugging
+          if (err.response) {
+            console.error(`Backend status code: ${err.response.status}`);
+            console.error(`Backend error body:`, JSON.stringify(err.response.data, null, 2));
+          } else {
+            console.error(`Network or request error:`, err.message);
+          }
+          
+          // Log the exact payload that failed FOR DEBUGGING ONLY
+          console.error(`[DEBUG] Failed visit data from SQLite:`, {
+            id: v.id,
+            household_id: v.household_id,
+            member_id: v.member_id,
+            visit_type: v.visit_type,
+            observations_json_type: typeof v.observations_json,
+            observations_json_sample: String(v.observations_json).substring(0, 100)
+          });
+          
           // leave synced = 0, will retry next time
         }
       }
