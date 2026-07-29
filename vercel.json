@@ -1,7 +1,0 @@
-{
-  "framework": "nextjs",
-  "rootDirectory": "web-next",
-  "buildCommand": "npm run build",
-  "outputDirectory": "web-next/dist",
-  "installCommand": "npm install"
-}
