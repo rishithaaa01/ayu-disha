@@ -135,8 +135,8 @@ export default function QueueScreen() {
           </div>
         ) : (
           <PatientRecordPanel 
-            key={activePatient.patient_id}
-            patientId={activePatient.patient_id} 
+            key={activePatient.patient_id || activePatient._id || activePatient.id}
+            patientId={activePatient.patient_id || activePatient._id || activePatient.id} 
             initialData={activePatient}
           />
         )}

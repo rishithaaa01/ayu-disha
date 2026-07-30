@@ -210,28 +210,28 @@ export default function LabDashboard() {
                       className="p-5 cursor-pointer hover:bg-gray-50 transition-colors"
                       onClick={() => setExpandedId(isExpanded ? null : order._id)}
                     >
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start gap-4">
-                          <div className="bg-teal-100 p-3 rounded-xl shrink-0">
-                            <FlaskConical size={20} className="text-teal-600" />
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                          <div className="bg-teal-100 p-2.5 sm:p-3 rounded-xl shrink-0">
+                            <FlaskConical size={18} className="text-teal-600 sm:w-5 sm:h-5" />
                           </div>
-                          <div>
-                            <div className="flex items-center gap-2 mb-1">
-                              <h3 className="font-bold text-gray-800">{order.test_name}</h3>
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${urgencyColor[order.urgency] || urgencyColor.routine}`}>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1">
+                              <h3 className="font-bold text-gray-800 text-sm sm:text-base break-words">{order.test_name}</h3>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase shrink-0 whitespace-nowrap ${urgencyColor[order.urgency] || urgencyColor.routine}`}>
                                 {order.urgency}
                               </span>
                             </div>
-                            <div className="flex items-center gap-3 text-xs text-gray-500">
-                              <span className="flex items-center gap-1"><User size={11} /> {order.patient_name}</span>
-                              <span className="flex items-center gap-1"><Calendar size={11} /> {new Date(order.ordered_date).toLocaleDateString('en-IN')}</span>
-                              <span>Ordered by: {order.ordered_by}</span>
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs text-gray-500">
+                              <span className="flex items-center gap-1 shrink-0 whitespace-nowrap"><User size={11} /> {order.patient_name}</span>
+                              <span className="flex items-center gap-1 shrink-0 whitespace-nowrap"><Calendar size={11} /> {new Date(order.ordered_date).toLocaleDateString('en-IN')}</span>
+                              <span className="truncate">Ordered by: {order.ordered_by}</span>
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="bg-amber-100 text-amber-700 text-xs font-bold px-3 py-1 rounded-full">Pending</span>
-                          {isExpanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+                        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                          <span className="bg-amber-100 text-amber-700 text-[10px] sm:text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap">Pending</span>
+                          {isExpanded ? <ChevronUp size={16} className="text-gray-400 shrink-0" /> : <ChevronDown size={16} className="text-gray-400 shrink-0" />}
                         </div>
                       </div>
                     </div>
