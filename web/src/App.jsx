@@ -43,117 +43,119 @@ function App() {
   try {
     return (
       <ErrorBoundary>
-        <HashRouter>
-          <Routes>
-            <Route path="/" element={<Navigate to="/login" replace />} />
-            <Route path="/login" element={<Login />} />
+        <div className="w-full min-h-screen max-w-full overflow-x-hidden pb-safe flex flex-col bg-[#F7F3EE]">
+          <HashRouter>
+            <Routes>
+              <Route path="/" element={<Navigate to="/login" replace />} />
+              <Route path="/login" element={<Login />} />
 
-        {/* Clinician / Doctor routes */}
-        <Route
-          path="/clinician/*"
-          element={
-            <ProtectedRoute allowedRoles={['doctor']}>
-              <ClinicianApp />
-            </ProtectedRoute>
-          }
-        />
+              {/* Clinician / Doctor routes */}
+              <Route
+                path="/clinician/*"
+                element={
+                  <ProtectedRoute allowedRoles={['doctor']}>
+                    <ClinicianApp />
+                  </ProtectedRoute>
+                }
+              />
 
-        {/* Patient routes */}
-        <Route
-          path="/patient"
-          element={
-            <ProtectedRoute allowedRoles={['patient']}>
-              <PatientDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/patient/records"
-          element={
-            <ProtectedRoute allowedRoles={['patient']}>
-              <HealthRecords />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/patient/medicines"
-          element={
-            <ProtectedRoute allowedRoles={['patient']}>
-              <Medicines />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/patient/tests"
-          element={
-            <ProtectedRoute allowedRoles={['patient']}>
-              <LabTests />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/patient/consents"
-          element={
-            <ProtectedRoute allowedRoles={['patient']}>
-              <Consents />
-            </ProtectedRoute>
-          }
-        />
+              {/* Patient routes */}
+              <Route
+                path="/patient"
+                element={
+                  <ProtectedRoute allowedRoles={['patient']}>
+                    <PatientDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/patient/records"
+                element={
+                  <ProtectedRoute allowedRoles={['patient']}>
+                    <HealthRecords />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/patient/medicines"
+                element={
+                  <ProtectedRoute allowedRoles={['patient']}>
+                    <Medicines />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/patient/tests"
+                element={
+                  <ProtectedRoute allowedRoles={['patient']}>
+                    <LabTests />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/patient/consents"
+                element={
+                  <ProtectedRoute allowedRoles={['patient']}>
+                    <Consents />
+                  </ProtectedRoute>
+                }
+              />
 
-        {/* Admin routes */}
-        <Route
-          path="/admin/*"
-          element={
-            <ProtectedRoute allowedRoles={['admin']}>
-              <AdminDashboard />
-            </ProtectedRoute>
-          }
-        />
+              {/* Admin routes */}
+              <Route
+                path="/admin/*"
+                element={
+                  <ProtectedRoute allowedRoles={['admin']}>
+                    <AdminDashboard />
+                  </ProtectedRoute>
+                }
+              />
 
-        {/* PHO routes */}
-        <Route
-          path="/pho/*"
-          element={
-            <ProtectedRoute allowedRoles={['pho']}>
-              <PHODashboard />
-            </ProtectedRoute>
-          }
-        />
+              {/* PHO routes */}
+              <Route
+                path="/pho/*"
+                element={
+                  <ProtectedRoute allowedRoles={['pho']}>
+                    <PHODashboard />
+                  </ProtectedRoute>
+                }
+              />
 
-        {/* ASHA routes */}
-        <Route
-          path="/asha/*"
-          element={
-            <ProtectedRoute allowedRoles={['asha']}>
-              <AshaDashboard />
-            </ProtectedRoute>
-          }
-        />
+              {/* ASHA routes */}
+              <Route
+                path="/asha/*"
+                element={
+                  <ProtectedRoute allowedRoles={['asha']}>
+                    <AshaDashboard />
+                  </ProtectedRoute>
+                }
+              />
 
-        {/* Lab Tech routes */}
-        <Route
-          path="/lab"
-          element={
-            <ProtectedRoute allowedRoles={['lab']}>
-              <LabDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/lab/*"
-          element={
-            <ProtectedRoute allowedRoles={['lab']}>
-              <LabDashboard />
-            </ProtectedRoute>
-          }
-        />
+              {/* Lab Tech routes */}
+              <Route
+                path="/lab"
+                element={
+                  <ProtectedRoute allowedRoles={['lab']}>
+                    <LabDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/lab/*"
+                element={
+                  <ProtectedRoute allowedRoles={['lab']}>
+                    <LabDashboard />
+                  </ProtectedRoute>
+                }
+              />
 
-        {/* Catch-all */}
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
-    </HashRouter>
-    </ErrorBoundary>
-  );
+              {/* Catch-all */}
+              <Route path="*" element={<Navigate to="/login" replace />} />
+            </Routes>
+          </HashRouter>
+        </div>
+      </ErrorBoundary>
+    );
   } catch (error) {
     console.error('❌ Critical error in App:', error);
     return (

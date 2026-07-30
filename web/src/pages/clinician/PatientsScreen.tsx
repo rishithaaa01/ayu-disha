@@ -34,11 +34,14 @@ interface Patient {
   total_visits?: number;
 }
 
+import { useClinicianStore } from '../../store/clinicianStore';
+
 export default function PatientsScreen() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRisk, setFilterRisk] = useState<string>('all');
   const { updatePatientCounts } = useRealTimeUpdates();
+  const { setActivePatient } = useClinicianStore();
 
   // Fetch doctor's patients
   const { data: patients = [], isLoading, refetch } = useQuery({
@@ -74,9 +77,9 @@ export default function PatientsScreen() {
     return matchesSearch && matchesRisk;
   });
 
-  const handlePatientClick = (patientId: string) => {
-    // Navigate to patient detail view (you can create this later)
-    navigate(`/clinician/patient/${patientId}`);
+  const handlePatientClick = (patient: Patient) => {
+    setActivePatient(patient);
+    navigate('/clinician/queue');
   };
 
   const getRiskBadge = (risk?: string) => {
@@ -244,7 +247,7 @@ export default function PatientsScreen() {
             {filteredPatients.map((patient: Patient) => (
               <div
                 key={patient.patient_id}
-                onClick={() => handlePatientClick(patient.patient_id)}
+                onClick={() => handlePatientClick(patient)}
                 className="px-6 py-4 hover:bg-gray-50 transition-colors cursor-pointer group"
               >
                 <div className="flex items-start justify-between">

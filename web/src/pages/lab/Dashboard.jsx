@@ -96,7 +96,7 @@ export default function LabDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F3EE]">
+    <div className="min-h-screen bg-[#F7F3EE] w-full max-w-full overflow-x-hidden">
       {/* Error boundary for API failures */}
       {(pendingError || completedError) && (
         <div className="bg-red-50 border-l-4 border-red-500 p-4 m-4">
@@ -108,30 +108,32 @@ export default function LabDashboard() {
       )}
       
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="bg-teal-600 p-2 rounded-xl">
-            <FlaskConical size={20} className="text-white" />
+      <header className="pt-safe bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+        <div className="px-4 sm:px-8 py-3 sm:py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="bg-teal-600 p-2 rounded-xl">
+              <FlaskConical size={20} className="text-white" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-gray-800">Lab Dashboard</h1>
+              <p className="text-xs text-gray-400">{user?.name} · {user?.hospital || 'Lab Technician'}</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg font-bold text-gray-800">Lab Dashboard</h1>
-            <p className="text-xs text-gray-400">{user?.name} · {user?.hospital || 'Lab Technician'}</p>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => { refetchPending(); queryClient.invalidateQueries({ queryKey: ['labCompletedOrders'] }); }}
+              className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
+              title="Refresh"
+            >
+              <RefreshCcw size={18} className={pendingLoading ? 'animate-spin' : ''} />
+            </button>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 text-red-500 hover:text-red-700 font-semibold text-sm"
+            >
+              <LogOut size={16} /> Logout
+            </button>
           </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => { refetchPending(); queryClient.invalidateQueries({ queryKey: ['labCompletedOrders'] }); }}
-            className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
-            title="Refresh"
-          >
-            <RefreshCcw size={18} className={pendingLoading ? 'animate-spin' : ''} />
-          </button>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 text-red-500 hover:text-red-700 font-semibold text-sm"
-          >
-            <LogOut size={16} /> Logout
-          </button>
         </div>
       </header>
 
@@ -385,13 +387,15 @@ export default function LabDashboard() {
                     <div className="flex items-center gap-2">
                       {order.pdf_url && (
                         <a
-                          href={order.pdf_url}
+                          href={order.pdf_url.startsWith('http') ? order.pdf_url : `https://ayu-disha.onrender.com${order.pdf_url.startsWith('/') ? '' : '/'}${order.pdf_url}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={(e) => {
-                            // Open PDF without auth headers
                             e.preventDefault();
-                            window.open(order.pdf_url, '_blank', 'noopener,noreferrer');
+                            const fullUrl = order.pdf_url.startsWith('http') 
+                              ? order.pdf_url 
+                              : `https://ayu-disha.onrender.com${order.pdf_url.startsWith('/') ? '' : '/'}${order.pdf_url}`;
+                            window.open(fullUrl, '_blank');
                           }}
                           className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-semibold bg-blue-50 px-3 py-1.5 rounded-lg"
                         >

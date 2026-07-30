@@ -1,0 +1,25 @@
+{
+  "appId": "com.ayudisha.app",
+  "appName": "Ayu Disha",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "backgroundColor": "#1B6CA8",
+      "showSpinner": false
+    },
+    "Keyboard": {
+      "resize": "body",
+      "resizeOnFullScreen": true
+    },
+    "StatusBar": {
+      "overlaysWebView": true,
+      "backgroundColor": "#00000000",
+      "style": "LIGHT"
+    }
+  }
+}

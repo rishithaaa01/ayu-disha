@@ -84,32 +84,34 @@ export default function PHODashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#F7F3EE]">
+    <div className="min-h-screen bg-[#F7F3EE] w-full max-w-full overflow-x-hidden">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="bg-[#2C8C68] p-2 rounded-xl">
-            <Map size={20} className="text-white" />
+      <header className="pt-safe bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+        <div className="px-4 sm:px-8 py-3 sm:py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="bg-[#2C8C68] p-2 rounded-xl">
+              <Map size={20} className="text-white" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-gray-800">Ayu Disha PHO</h1>
+              <p className="text-xs text-gray-400">Public Health Officer Dashboard</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg font-bold text-gray-800">Ayu Disha PHO</h1>
-            <p className="text-xs text-gray-400">Public Health Officer Dashboard</p>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => refetch()}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-500"
+            >
+              <RefreshCcw size={18} className={isLoading ? 'animate-spin' : ''} />
+            </button>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 text-red-500 hover:text-red-700 font-semibold text-sm"
+            >
+              <LogOut size={16} />
+              Logout
+            </button>
           </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => refetch()}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-500"
-          >
-            <RefreshCcw size={18} className={isLoading ? 'animate-spin' : ''} />
-          </button>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 text-red-500 hover:text-red-700 font-semibold text-sm"
-          >
-            <LogOut size={16} />
-            Logout
-          </button>
         </div>
       </header>
 

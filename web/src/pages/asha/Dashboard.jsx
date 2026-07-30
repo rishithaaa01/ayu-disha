@@ -563,38 +563,39 @@ export default function AshaDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F3EE]">
+    <div className="min-h-screen bg-[#F7F3EE] w-full max-w-full overflow-x-hidden">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="bg-[#1B6CA8] p-2.5 rounded-xl">
-            <Home size={20} className="text-white" />
+      <header className="pt-safe bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+        <div className="px-4 sm:px-8 py-3 sm:py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="bg-[#1B6CA8] p-2 sm:p-2.5 rounded-xl">
+              <Home size={18} className="text-white" />
+            </div>
+            <div>
+              <h1 className="text-base sm:text-lg font-bold text-gray-800">Ayu Disha ASHA</h1>
+              <p className="text-[10px] sm:text-xs text-gray-400">Community Health Worker Dashboard</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg font-bold text-gray-800">Ayu Disha ASHA</h1>
-            <p className="text-xs text-gray-400">Community Health Worker Dashboard</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="text-right hidden sm:block">
-            <p className="text-sm font-bold text-gray-800">{user?.name || 'ASHA Worker'}</p>
-            <p className="text-xs text-[#1B6CA8] font-semibold">{user?.village || user?.district || '—'}</p>
-          </div>
-          <div className="relative">
-            <button
-              onClick={() => setShowBellDropdown(!showBellDropdown)}
-              className={`relative p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 ${showBellDropdown ? 'bg-gray-100' : ''}`}
-            >
-              <Bell size={18} />
-              {unreadNotificationsCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] bg-red-500 rounded-full border border-white flex items-center justify-center text-[8px] font-extrabold text-white px-0.5">
-                  {unreadNotificationsCount}
-                </span>
-              )}
-            </button>
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="text-right hidden sm:block">
+              <p className="text-sm font-bold text-gray-800">{user?.name || 'ASHA Worker'}</p>
+              <p className="text-xs text-[#1B6CA8] font-semibold">{user?.village || user?.district || '—'}</p>
+            </div>
+            <div className="relative">
+              <button
+                onClick={() => setShowBellDropdown(!showBellDropdown)}
+                className={`relative p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 ${showBellDropdown ? 'bg-gray-100' : ''}`}
+              >
+                <Bell size={18} />
+                {unreadNotificationsCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] bg-red-500 rounded-full border border-white flex items-center justify-center text-[8px] font-extrabold text-white px-0.5">
+                    {unreadNotificationsCount}
+                  </span>
+                )}
+              </button>
 
-            {showBellDropdown && (
-              <div className="absolute right-0 mt-3 w-80 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden z-50 animate-fadeIn text-left">
+              {showBellDropdown && (
+                <div className="absolute right-0 mt-3 w-72 sm:w-80 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden z-50 animate-fadeIn text-left">
                 <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
                   <span className="font-bold text-xs uppercase tracking-wider text-gray-600">Village Alerts</span>
                   {unreadNotificationsCount > 0 && (
@@ -686,6 +687,7 @@ export default function AshaDashboard() {
             <span className="hidden sm:inline">Logout</span>
           </button>
         </div>
+      </div>
       </header>
       <main className="max-w-7xl mx-auto p-8 space-y-8">
         {offlineVisits.length > 0 && (

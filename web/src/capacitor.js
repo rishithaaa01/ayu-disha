@@ -9,19 +9,19 @@ export const initializeCapacitor = async () => {
   if (isNative) {
     console.log('Running on native platform:', Capacitor.getPlatform());
     
-    // Configure Status Bar
+    // Configure Status Bar for transparent overlay and light icons
     try {
+      await StatusBar.setOverlaysWebView({ overlay: true });
       await StatusBar.setStyle({ style: Style.Light });
-      await StatusBar.setBackgroundColor({ color: '#1B6CA8' });
     } catch (err) {
-      console.warn('StatusBar configuration failed:', err);
+      console.warn('StatusBar configuration notice:', err);
     }
     
     // Hide splash screen after app is ready
     try {
       await SplashScreen.hide();
     } catch (err) {
-      console.warn('SplashScreen hide failed:', err);
+      console.warn('SplashScreen hide notice:', err);
     }
     
     // Handle app state changes
@@ -29,9 +29,9 @@ export const initializeCapacitor = async () => {
       console.log('App state changed. Is active:', isActive);
     });
     
-    // Handle back button
+    // Handle Android hardware back button
     App.addListener('backButton', ({ canGoBack }) => {
-      if (!canGoBack) {
+      if (!canGoBack || window.location.pathname === '/' || window.location.pathname === '/login') {
         App.exitApp();
       } else {
         window.history.back();

@@ -41,40 +41,40 @@ export default function PatientDashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#F7F3EE]">
+    <div className="min-h-screen bg-[#F7F3EE] w-full max-w-full overflow-x-hidden">
       <Navbar />
-      <div className="max-w-5xl mx-auto px-4 py-8">
+      <div className="w-full max-w-5xl mx-auto px-3 sm:px-6 py-4 sm:py-8 pb-safe">
 
         {/* Welcome */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-800">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-800">
             Welcome back, {profileLoading ? '...' : profile?.name || user?.name} 👋
           </h1>
-          <p className="text-gray-500 mt-1">Here's your health summary for today.</p>
+          <p className="text-gray-500 text-xs sm:text-sm mt-1">Here's your health summary for today.</p>
         </div>
 
         {/* Health Card */}
         {!profileLoading && profile && (
-          <div className="bg-gradient-to-r from-[#1B6CA8] to-[#1557A0] text-white rounded-2xl p-6 mb-6 shadow-lg">
+          <div className="bg-gradient-to-r from-[#1B6CA8] to-[#1557A0] text-white rounded-2xl p-4 sm:p-6 mb-6 shadow-lg">
             <div className="flex justify-between items-start">
               <div>
-                <p className="text-white/70 text-sm font-medium uppercase tracking-wider">Patient</p>
-                <h2 className="text-2xl font-bold mt-1">{profile.name}</h2>
+                <p className="text-white/70 text-xs font-medium uppercase tracking-wider">Patient</p>
+                <h2 className="text-xl sm:text-2xl font-bold mt-1">{profile.name}</h2>
                 {profile.abha_number && (
-                  <p className="text-white/80 text-sm mt-1">ABHA: {profile.abha_number}</p>
+                  <p className="text-white/80 text-xs sm:text-sm mt-1">ABHA: {profile.abha_number}</p>
                 )}
               </div>
               <div className="text-right">
                 {profile.blood_group && (
-                  <span className="bg-red-500 text-white px-3 py-1 rounded-full text-sm font-bold">{profile.blood_group}</span>
+                  <span className="bg-red-500 text-white px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full text-xs sm:text-sm font-bold">{profile.blood_group}</span>
                 )}
               </div>
             </div>
             {profile.allergies?.length > 0 && (
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-4 flex flex-wrap gap-1.5 sm:gap-2">
                 <span className="text-white/70 text-xs">Allergies:</span>
                 {profile.allergies.map((a) => (
-                  <span key={a} className="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full">{a}</span>
+                  <span key={a} className="bg-white/20 text-white text-[11px] sm:text-xs px-2 py-0.5 rounded-full">{a}</span>
                 ))}
               </div>
             )}
@@ -84,21 +84,21 @@ export default function PatientDashboard() {
 
         {/* Upcoming Follow-up Banner */}
         {upcomingFollowUp && (
-          <div className="bg-amber-50 border-l-4 border-amber-400 rounded-xl p-4 mb-6 flex items-start space-x-3">
-            <Calendar className="text-amber-500 mt-0.5 shrink-0" size={20} />
+          <div className="bg-amber-50 border-l-4 border-amber-400 rounded-xl p-3.5 sm:p-4 mb-6 flex items-start space-x-3">
+            <Calendar className="text-amber-500 mt-0.5 shrink-0" size={18} />
             <div>
-              <p className="font-semibold text-amber-800">Follow-up Due</p>
-              <p className="text-amber-700 text-sm">{new Date(upcomingFollowUp.follow_up_date).toLocaleDateString('en-IN', { dateStyle: 'long' })} at {upcomingFollowUp.hospital_name}</p>
+              <p className="font-semibold text-amber-800 text-sm">Follow-up Due</p>
+              <p className="text-amber-700 text-xs sm:text-sm">{new Date(upcomingFollowUp.follow_up_date).toLocaleDateString('en-IN', { dateStyle: 'long' })} at {upcomingFollowUp.hospital_name}</p>
             </div>
           </div>
         )}
 
         {/* AI Summary */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-6 mb-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-white rounded-2xl border border-gray-100 p-4 sm:p-6 mb-6 shadow-sm">
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
             <div className="flex items-center space-x-2">
               <Sparkles size={18} className="text-[#1B6CA8]" />
-              <h3 className="font-bold text-gray-800">Your Health Today</h3>
+              <h3 className="font-bold text-gray-800 text-sm sm:text-base">Your Health Today</h3>
             </div>
             <button onClick={() => refetchSummary()} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
               <RefreshCw size={16} className="text-gray-400" />
@@ -111,21 +111,21 @@ export default function PatientDashboard() {
               <div className="h-4 bg-gray-100 animate-pulse rounded w-4/6" />
             </div>
           ) : (
-            <p className="text-gray-600 leading-relaxed text-sm">
+            <p className="text-gray-600 leading-relaxed text-xs sm:text-sm">
               {summary?.summary || 'No health summary available yet. Your AI health summary will appear here after your medical records are updated.'}
             </p>
           )}
         </div>
 
         {/* Quick Links Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4 mb-6">
           {quickLinks.map(({ to, id, label, icon: Icon, color, action }) => {
             const inner = (
               <>
-                <div className={`p-3 rounded-xl ${color}`}>
-                  <Icon size={22} />
+                <div className={`p-2.5 sm:p-3 rounded-xl ${color}`}>
+                  <Icon size={20} />
                 </div>
-                <span className="text-sm font-semibold text-gray-700 group-hover:text-[#1B6CA8] transition-colors">{label}</span>
+                <span className="text-xs sm:text-sm font-semibold text-gray-700 group-hover:text-[#1B6CA8] transition-colors">{label}</span>
               </>
             );
 
@@ -133,7 +133,7 @@ export default function PatientDashboard() {
               <Link
                 key={to}
                 to={to}
-                className="flex flex-col items-center justify-center p-5 rounded-2xl border bg-white hover:shadow-md transition-all space-y-3 group"
+                className="flex flex-col items-center justify-center p-3.5 sm:p-5 rounded-2xl border bg-white hover:shadow-md transition-all space-y-2.5 sm:space-y-3 group"
               >
                 {inner}
               </Link>
@@ -141,7 +141,7 @@ export default function PatientDashboard() {
               <button
                 key={id}
                 onClick={action}
-                className="flex flex-col items-center justify-center p-5 rounded-2xl border bg-white hover:shadow-md transition-all space-y-3 group w-full h-full"
+                className="flex flex-col items-center justify-center p-3.5 sm:p-5 rounded-2xl border bg-white hover:shadow-md transition-all space-y-2.5 sm:space-y-3 group w-full h-full"
               >
                 {inner}
               </button>

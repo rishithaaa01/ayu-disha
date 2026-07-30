@@ -54,13 +54,13 @@ export default function Consents() {
   const revokedConsents = consents.filter(c => c.revoked);
 
   return (
-    <div className="min-h-screen bg-[#F7F3EE]">
+    <div className="min-h-screen bg-[#F7F3EE] w-full max-w-full overflow-x-hidden">
       <Navbar />
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
+      <div className="w-full max-w-4xl mx-auto px-3 sm:px-6 py-4 sm:py-8 pb-safe">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">Data Consents</h1>
-            <p className="text-gray-500 mt-1">Control who can access your medical records</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Data Consents</h1>
+            <p className="text-gray-500 text-xs sm:text-sm mt-1">Control who can access your medical records</p>
           </div>
           <button
             onClick={() => setShowGrantForm(true)}

@@ -10,12 +10,12 @@ export default function Medicines() {
   });
 
   return (
-    <div className="min-h-screen bg-[#F7F3EE]">
+    <div className="min-h-screen bg-[#F7F3EE] w-full max-w-full overflow-x-hidden">
       <Navbar />
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">My Medicines</h1>
-          <p className="text-gray-500 mt-1">All prescribed medications across your visits</p>
+      <div className="w-full max-w-4xl mx-auto px-3 sm:px-6 py-4 sm:py-8 pb-safe">
+        <div className="mb-4 sm:mb-6">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-800">My Medicines</h1>
+          <p className="text-gray-500 text-xs sm:text-sm mt-1">All prescribed medications across your visits</p>
         </div>
 
         {isLoading ? (

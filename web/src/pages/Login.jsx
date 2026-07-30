@@ -458,40 +458,40 @@ export default function Login() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#F5EFE6] via-[#FDFBF7] to-[#EAE5DF] flex flex-col justify-center items-center p-4 relative overflow-hidden">
+    <div className="min-h-screen pt-safe pb-safe bg-gradient-to-br from-[#F5EFE6] via-[#FDFBF7] to-[#EAE5DF] flex flex-col justify-center items-center p-3 sm:p-6 relative w-full max-w-full overflow-x-hidden">
       {/* Decorative ambient background glows */}
       <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-[#1B6CA8]/5 blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-orange-600/5 blur-[120px] pointer-events-none" />
       
 
-      <div className="w-full max-w-5xl bg-white rounded-3xl shadow-[0_20px_50px_rgba(27,108,168,0.08)] overflow-hidden border border-gray-100/80 transition-all duration-300 grid grid-cols-1 md:grid-cols-12 min-h-[600px]">
+      <div className="w-full max-w-5xl bg-white rounded-2xl sm:rounded-3xl shadow-[0_20px_50px_rgba(27,108,168,0.08)] overflow-hidden border border-gray-100/80 transition-all duration-300 grid grid-cols-1 md:grid-cols-12 min-h-0 md:min-h-[580px]">
         
         {/* Left Side: Brand & Visuals */}
-        <div className="md:col-span-5 bg-gradient-to-br from-[#1B6CA8] via-[#155A8A] to-[#0E3E61] p-10 flex flex-col justify-between text-white relative overflow-hidden">
+        <div className="md:col-span-5 bg-gradient-to-br from-[#1B6CA8] via-[#155A8A] to-[#0E3E61] p-6 sm:p-8 md:p-10 flex flex-col justify-between text-white relative overflow-hidden">
           <div className="absolute inset-0 opacity-5 bg-[linear-gradient(to_right,#808080_1px,transparent_1px),linear-gradient(to_bottom,#808080_1px,transparent_1px)] bg-[size:14px_24px]" />
           
-          <div className="relative z-10 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20">
+          <div className="relative z-10 flex items-center gap-3 mb-6 md:mb-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20">
               <Activity className="text-white" size={20} />
             </div>
-            <span className="text-xl font-bold tracking-wider uppercase font-mukta">Ayu Disha</span>
+            <span className="text-lg sm:text-xl font-bold tracking-wider uppercase font-mukta">Ayu Disha</span>
           </div>
 
-          <div className="relative z-10 space-y-4 my-auto">
-            <h2 className="text-3xl font-extrabold tracking-tight leading-tight">Clinic-OS for rural healthcare in India</h2>
-            <p className="text-blue-100/80 text-sm leading-relaxed">
+          <div className="relative z-10 space-y-2 sm:space-y-4 my-auto">
+            <h2 className="text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight leading-tight">Clinic-OS for rural healthcare in India</h2>
+            <p className="text-blue-100/80 text-xs sm:text-sm leading-relaxed">
               Bridging community health workers (Asha), clinics, and district supervisors on a unified, high-reliability platform.
             </p>
           </div>
 
-          <div className="relative z-10 text-xs text-blue-200/50 flex justify-between items-center border-t border-white/10 pt-4">
+          <div className="relative z-10 text-[10px] sm:text-xs text-blue-200/50 flex justify-between items-center border-t border-white/10 pt-3 mt-4 md:mt-0">
             <span>© 2026 Ayu Disha</span>
             <span>National Health Mission</span>
           </div>
         </div>
 
         {/* Right Side: Authentication Forms */}
-        <div className="md:col-span-7 p-8 md:p-12 flex flex-col justify-center bg-white">
+        <div className="md:col-span-7 p-4 sm:p-8 md:p-12 flex flex-col justify-center bg-white">
           
           {/* Notifications */}
           {error && (

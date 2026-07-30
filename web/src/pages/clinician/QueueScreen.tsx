@@ -5,7 +5,7 @@ import { useClinicianStore } from '../../store/clinicianStore';
 import QueueCard from './components/QueueCard';
 import LoadingSkeleton from './components/LoadingSkeleton';
 import PatientRecordPanel from './components/PatientRecordPanel';
-import { Stethoscope, Filter, RefreshCcw } from 'lucide-react';
+import { Stethoscope, Filter, RefreshCcw, ChevronLeft } from 'lucide-react';
 
 export default function QueueScreen() {
   const [filter, setFilter] = useState<'all' | 'urgent' | 'watch' | 'low'>('all');
@@ -36,11 +36,11 @@ export default function QueueScreen() {
   };
 
   return (
-    <div className="flex gap-8 h-full">
-      {/* LEFT COLUMN: QUEUE PANEL (380px) */}
-      <div className="w-[380px] flex flex-col h-full">
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-2">
+    <div className="flex flex-col lg:flex-row gap-6 w-full min-w-0 h-full">
+      {/* LEFT COLUMN: QUEUE PANEL */}
+      <div className={`w-full lg:w-[360px] xl:w-[380px] lg:shrink-0 flex flex-col ${activePatient ? 'hidden lg:flex' : 'flex'}`}>
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-1">
             <h2 className="text-xl font-bold text-[#333]">OPD Queue</h2>
             <div className="flex items-center gap-1.5 text-[10px] text-[#888] font-medium uppercase tracking-wider">
               {isFetching ? (
@@ -55,18 +55,18 @@ export default function QueueScreen() {
         </div>
 
         {/* Stats Row */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <div className="bg-red-50 p-3 rounded-xl border border-red-100">
+        <div className="grid grid-cols-3 gap-2.5 mb-4">
+          <div className="bg-red-50 p-2.5 sm:p-3 rounded-xl border border-red-100">
             <p className="text-[10px] font-bold text-red-600 uppercase">Urgent</p>
-            <p className="text-xl font-bold text-red-700">{stats.urgent}</p>
+            <p className="text-lg sm:text-xl font-bold text-red-700">{stats.urgent}</p>
           </div>
-          <div className="bg-amber-50 p-3 rounded-xl border border-amber-100">
+          <div className="bg-amber-50 p-2.5 sm:p-3 rounded-xl border border-amber-100">
             <p className="text-[10px] font-bold text-amber-600 uppercase">Watch</p>
-            <p className="text-xl font-bold text-amber-700">{stats.watch}</p>
+            <p className="text-lg sm:text-xl font-bold text-amber-700">{stats.watch}</p>
           </div>
-          <div className="bg-blue-50 p-3 rounded-xl border border-blue-100">
+          <div className="bg-blue-50 p-2.5 sm:p-3 rounded-xl border border-blue-100">
             <p className="text-[10px] font-bold text-blue-600 uppercase">Low</p>
-            <p className="text-xl font-bold text-blue-700">{stats.low}</p>
+            <p className="text-lg sm:text-xl font-bold text-blue-700">{stats.low}</p>
           </div>
         </div>
 
@@ -77,7 +77,7 @@ export default function QueueScreen() {
               key={f}
               onClick={() => setFilter(f)}
               className={`
-                flex-1 pb-3 text-xs font-bold uppercase tracking-wider transition-all
+                flex-1 pb-2.5 text-xs font-bold uppercase tracking-wider transition-all
                 ${filter === f ? 'text-[#1B6CA8] border-b-2 border-[#1B6CA8]' : 'text-[#888] hover:text-[#555]'}
               `}
             >
@@ -87,7 +87,7 @@ export default function QueueScreen() {
         </div>
 
         {/* Scrollable List */}
-        <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+        <div className="flex-1 min-h-[300px] overflow-y-auto pr-1 space-y-3 custom-scrollbar">
           {isLoading ? (
             <LoadingSkeleton type="card" count={4} />
           ) : filteredQueue.length === 0 ? (
@@ -110,15 +110,27 @@ export default function QueueScreen() {
       </div>
 
       {/* RIGHT COLUMN: PATIENT DETAIL */}
-      <div className="flex-1 bg-white rounded-2xl border border-[#E2DDD8] shadow-sm overflow-hidden flex flex-col">
+      <div className={`flex-1 bg-white rounded-2xl border border-[#E2DDD8] shadow-sm overflow-hidden flex-col ${activePatient ? 'flex' : 'hidden lg:flex'}`}>
+        {activePatient && (
+          <div className="lg:hidden p-3 bg-gray-50 border-b border-[#E2DDD8] flex items-center">
+            <button
+              onClick={() => setActivePatient(null)}
+              className="flex items-center gap-1.5 text-sm font-bold text-[#1B6CA8]"
+            >
+              <ChevronLeft size={18} />
+              <span>Back to Queue</span>
+            </button>
+          </div>
+        )}
+
         {!activePatient ? (
-          <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
-            <div className="w-20 h-20 bg-[#F7F3EE] rounded-full flex items-center justify-center mb-6 text-[#1B6CA8]/30">
-              <Stethoscope size={40} />
+          <div className="flex-1 flex flex-col items-center justify-center p-8 sm:p-12 text-center min-h-[300px]">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-[#F7F3EE] rounded-full flex items-center justify-center mb-4 sm:mb-6 text-[#1B6CA8]/30">
+              <Stethoscope size={36} />
             </div>
-            <h3 className="text-xl font-bold text-[#333] mb-2 font-mukta">Ready for Consultation</h3>
-            <p className="text-[#666] max-w-xs text-sm">
-              Select a patient from the queue on the left to view their medical history and begin the consultation.
+            <h3 className="text-lg sm:text-xl font-bold text-[#333] mb-2 font-mukta">Ready for Consultation</h3>
+            <p className="text-[#666] max-w-xs text-xs sm:text-sm">
+              Select a patient from the queue to view their medical history and begin the consultation.
             </p>
           </div>
         ) : (
