@@ -18,6 +18,8 @@ import { useNavigate } from 'react-router-dom';
 import { useClinicianStore } from '../../../store/clinicianStore';
 import { useRealTimeUpdates } from '../../../contexts/RealTimeUpdateContext';
 import toast from 'react-hot-toast';
+import { Capacitor } from '@capacitor/core';
+import { Browser } from '@capacitor/browser';
 
 interface PatientRecordPanelProps {
   patientId: string;
@@ -261,6 +263,13 @@ export default function PatientRecordPanel({ patientId, initialData }: PatientRe
                               
                               return `${backendBase}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
                             })()}
+                            onClick={async (e) => {
+                              if (Capacitor.getPlatform() === 'android') {
+                                e.preventDefault();
+                                const href = e.currentTarget.href;
+                                await Browser.open({ url: href });
+                              }
+                            }}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center gap-1 text-xs text-blue-600 font-semibold bg-blue-50 px-2.5 py-1 rounded-lg hover:bg-blue-100 transition-colors"

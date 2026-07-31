@@ -10,6 +10,7 @@ import {
   User, Calendar, Sparkles, ExternalLink, X
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
+import { Browser } from '@capacitor/browser';
 
 export default function LabDashboard() {
   const navigate = useNavigate();
@@ -442,6 +443,13 @@ export default function LabDashboard() {
                             if (/^https?:\/\//i.test(rawUrl)) return rawUrl;
                             return `${backendBase}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
                           })()}
+                          onClick={async (e) => {
+                            if (Capacitor.getPlatform() === 'android') {
+                              e.preventDefault();
+                              const href = e.currentTarget.href;
+                              await Browser.open({ url: href });
+                            }
+                          }}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-semibold bg-blue-50 px-3 py-1.5 rounded-lg cursor-pointer"

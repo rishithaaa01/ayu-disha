@@ -73,6 +73,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from fastapi.staticfiles import StaticFiles
+import os
+
+uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
+os.makedirs(uploads_dir, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
+
 # Registrer Routers: Priority Order
 app.include_router(auth.router,         prefix="/api/auth",         tags=["auth"])
 app.include_router(asha.router,         prefix="/api/asha",         tags=["asha"])

@@ -4,6 +4,7 @@ import tempfile
 import json
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi.responses import FileResponse, RedirectResponse
 from typing import Optional
 from bson import ObjectId
 from database import get_database
@@ -134,8 +135,7 @@ async def upload_pdf_to_cloudinary(file_path: str, lab_order_id: str) -> Optiona
             file_path,
             resource_type="raw",
             folder="ayu_disha/lab_reports",
-            public_id=f"lab_{lab_order_id}_{uuid.uuid4().hex[:8]}",
-            format="pdf",
+            public_id=f"lab_{lab_order_id}_{uuid.uuid4().hex[:8]}.pdf",
             access_mode="public"
         )
         return result.get("secure_url")
@@ -273,8 +273,20 @@ async def upload_lab_result(
             pdf_text = await extract_pdf_text(temp_path)
             print(f"Extracted {len(pdf_text)} chars from PDF")
 
-            # Upload to Cloudinary
+            # Upload to Cloudinary (or fallback to local uploads)
             pdf_url = await upload_pdf_to_cloudinary(temp_path, lab_order_id)
+            if not pdf_url:
+                try:
+                    uploads_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads", "lab_reports")
+                    os.makedirs(uploads_dir, exist_ok=True)
+                    local_filename = f"lab_{lab_order_id}_{uuid.uuid4().hex[:8]}.pdf"
+                    local_filepath = os.path.join(uploads_dir, local_filename)
+                    import shutil
+                    shutil.copy2(temp_path, local_filepath)
+                    pdf_url = f"/uploads/lab_reports/{local_filename}"
+                    print(f"Stored PDF locally at: {pdf_url}")
+                except Exception as local_err:
+                    print(f"Failed to store PDF locally: {local_err}")
 
         finally:
             if temp_path and os.path.exists(temp_path):
@@ -549,6 +561,31 @@ async def get_my_lab_results(current_user: UserResponse = Depends(get_current_us
         return response
     
     return []
+
+
+@router.get("/orders/{lab_id}/pdf")
+async def get_lab_order_pdf(lab_id: str):
+    """
+    Direct endpoint to download or view the PDF for a lab order.
+    """
+    db = get_database()
+    lab_order = await db.lab_orders.find_one({"_id": safe_object_id(lab_id)})
+    if not lab_order:
+        raise HTTPException(status_code=404, detail="Lab order not found")
+
+    pdf_url = lab_order.get("pdf_url")
+    if not pdf_url:
+        raise HTTPException(status_code=404, detail="No PDF report attached to this lab order")
+
+    if pdf_url.startswith("http://") or pdf_url.startswith("https://"):
+        return RedirectResponse(url=pdf_url)
+
+    clean_path = pdf_url.lstrip("/")
+    local_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), clean_path)
+    if os.path.exists(local_path):
+        return FileResponse(local_path, media_type="application/pdf", filename=os.path.basename(local_path))
+    else:
+        raise HTTPException(status_code=404, detail="Lab report PDF file not found on server")
 
 
 @router.patch("/notifications/{notif_id}/read")
