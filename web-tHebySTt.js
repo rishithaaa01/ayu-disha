@@ -1,0 +1,1 @@
+import{t as o}from"./asyncToGenerator-DMQiOeaB.js";import{t as r}from"./index-BRkhDA0N.js";var s=class extends r{show(n){return o(function*(){})()}hide(n){return o(function*(){})()}};export{s as SplashScreenWeb};
