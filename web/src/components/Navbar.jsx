@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, NavLink } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -114,8 +115,8 @@ export default function Navbar() {
                 )}
               </button>
 
-              {showNotifs && (
-                <div className="absolute right-0 mt-3 w-72 sm:w-80 bg-white border border-[#E2DDD8] rounded-2xl shadow-xl overflow-hidden z-50 animate-fadeIn text-left text-gray-800">
+              {showNotifs && createPortal(
+                <div className="fixed right-3 sm:right-6 top-[calc(env(safe-area-inset-top,0px)+4.25rem)] w-[calc(100vw-1.5rem)] max-w-xs sm:w-80 bg-white border border-[#E2DDD8] rounded-2xl shadow-2xl overflow-hidden z-[99999] animate-fadeIn text-left text-gray-800 pointer-events-auto">
                   <div className="px-4 py-3 bg-[#F7F3EE] border-b border-[#E2DDD8] flex justify-between items-center">
                     <span className="font-bold text-xs uppercase tracking-wider text-gray-600">Health Updates</span>
                     {unreadCount > 0 && (
@@ -158,7 +159,8 @@ export default function Navbar() {
                       </div>
                     )}
                   </div>
-                </div>
+                </div>,
+                document.body
               )}
             </div>
           )}

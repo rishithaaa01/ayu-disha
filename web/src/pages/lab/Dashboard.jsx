@@ -9,6 +9,7 @@ import {
   Clock, AlertTriangle, FileText, ChevronDown, ChevronUp,
   User, Calendar, Sparkles, ExternalLink, X
 } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 
 export default function LabDashboard() {
   const navigate = useNavigate();
@@ -41,8 +42,7 @@ export default function LabDashboard() {
   const { data: completedOrders = [], isLoading: completedLoading, isError: completedError } = useQuery({
     queryKey: ['labCompletedOrders'],
     queryFn: () => api.get('/lab/completed-orders').then(r => r.data),
-    enabled: activeTab === 'completed',
-    refetchInterval: 60000,
+    refetchInterval: 30000,
     retry: 1,
     onError: (error) => {
       console.error('Failed to fetch completed orders:', error);
@@ -54,7 +54,20 @@ export default function LabDashboard() {
       const formData = new FormData();
       formData.append('result_text', resultText);
       if (notes) formData.append('notes', notes);
-      if (file) formData.append('file', file);
+      
+      if (file) {
+        if (Capacitor.getPlatform() === 'android') {
+          // Android WebView struggles with 'content://' URIs in FormData.
+          // Reading it into a Blob first ensures it uploads correctly.
+          const arrayBuffer = await file.arrayBuffer();
+          const blob = new Blob([arrayBuffer], { type: file.type || 'application/pdf' });
+          formData.append('file', blob, file.name || 'report.pdf');
+        } else {
+          // Web works perfectly as is
+          formData.append('file', file);
+        }
+      }
+
       return api.post(`/lab/upload-result/${labOrderId}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 60000, // PDF processing can take a while
@@ -87,6 +100,35 @@ export default function LabDashboard() {
   const handleLogout = () => {
     logout();
     navigate('/login');
+  };
+
+  const handleFileSelect = async () => {
+    if (Capacitor.getPlatform() === 'android') {
+      try {
+        const { FilePicker } = await import('@capawesome/capacitor-file-picker');
+        const result = await FilePicker.pickFiles({
+          types: ['application/pdf'],
+          multiple: false,
+          readData: true
+        });
+        
+        if (result.files && result.files.length > 0) {
+          const fileData = result.files[0];
+          // Convert base64 straight to a Blob/File, bypassing URI restrictions entirely
+          const res = await fetch(`data:application/pdf;base64,${fileData.data}`);
+          const blob = await res.blob();
+          const mockFile = new File([blob], fileData.name || 'report.pdf', { type: 'application/pdf' });
+          setSelectedFile(mockFile);
+        }
+      } catch (err) {
+        if (err.message && !err.message.includes('canceled')) {
+          console.error('File pick error', err);
+          toast.error('Failed to select file.');
+        }
+      }
+    } else {
+      fileInputRef.current?.click();
+    }
   };
 
   const urgencyColor = {
@@ -137,39 +179,45 @@ export default function LabDashboard() {
         </div>
       </header>
 
-      <div className="max-w-5xl mx-auto px-6 py-8">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-4 mb-8">
-          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="bg-amber-100 p-2.5 rounded-xl"><Clock size={18} className="text-amber-600" /></div>
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Pending</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 sm:mb-8">
+          <div className="bg-white rounded-2xl border border-gray-100 p-4 sm:p-5 shadow-sm flex flex-col justify-between h-full">
+            <div className="flex items-center gap-3 mb-2.5">
+              <div className="bg-amber-100 p-2.5 rounded-xl shrink-0"><Clock size={20} className="text-amber-600" /></div>
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider truncate">Pending</p>
             </div>
-            <p className="text-3xl font-bold text-gray-800">{pendingOrders.length}</p>
-            <p className="text-xs text-gray-400 mt-1">Tests awaiting results</p>
+            <div>
+              <p className="text-2xl sm:text-3xl font-bold text-gray-800">{pendingOrders.length}</p>
+              <p className="text-xs text-gray-400 mt-1">Tests awaiting results</p>
+            </div>
           </div>
-          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="bg-red-100 p-2.5 rounded-xl"><AlertTriangle size={18} className="text-red-600" /></div>
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Urgent</p>
+          <div className="bg-white rounded-2xl border border-gray-100 p-4 sm:p-5 shadow-sm flex flex-col justify-between h-full">
+            <div className="flex items-center gap-3 mb-2.5">
+              <div className="bg-red-100 p-2.5 rounded-xl shrink-0"><AlertTriangle size={20} className="text-red-600" /></div>
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider truncate">Urgent</p>
             </div>
-            <p className="text-3xl font-bold text-gray-800">
-              {pendingOrders.filter(o => o.urgency === 'urgent' || o.urgency === 'emergency').length}
-            </p>
-            <p className="text-xs text-gray-400 mt-1">Priority tests</p>
+            <div>
+              <p className="text-2xl sm:text-3xl font-bold text-gray-800">
+                {pendingOrders.filter(o => o.urgency === 'urgent' || o.urgency === 'emergency').length}
+              </p>
+              <p className="text-xs text-gray-400 mt-1">Priority tests</p>
+            </div>
           </div>
-          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="bg-green-100 p-2.5 rounded-xl"><CheckCircle size={18} className="text-green-600" /></div>
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Completed</p>
+          <div className="bg-white rounded-2xl border border-gray-100 p-4 sm:p-5 shadow-sm flex flex-col justify-between h-full">
+            <div className="flex items-center gap-3 mb-2.5">
+              <div className="bg-green-100 p-2.5 rounded-xl shrink-0"><CheckCircle size={20} className="text-green-600" /></div>
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider truncate">Completed</p>
             </div>
-            <p className="text-3xl font-bold text-gray-800">{completedOrders.length}</p>
-            <p className="text-xs text-gray-400 mt-1">Recent results</p>
+            <div>
+              <p className="text-2xl sm:text-3xl font-bold text-gray-800">{completedOrders.length}</p>
+              <p className="text-xs text-gray-400 mt-1">Recent results</p>
+            </div>
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-200 mb-6">
+        <div className="flex border-b border-gray-200 mb-6 min-h-[48px]">
           {[
             { id: 'pending', label: `Pending (${pendingOrders.length})` },
             { id: 'completed', label: 'Completed' },
@@ -177,7 +225,7 @@ export default function LabDashboard() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-6 py-3 text-sm font-semibold border-b-2 transition-all ${
+              className={`px-6 py-3.5 text-sm font-semibold border-b-2 transition-all min-h-[48px] flex items-center justify-center ${
                 activeTab === tab.id ? 'border-teal-600 text-teal-700' : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -207,10 +255,10 @@ export default function LabDashboard() {
                     order.urgency === 'urgent' ? 'border-amber-200' : 'border-gray-100'
                   }`}>
                     <div
-                      className="p-5 cursor-pointer hover:bg-gray-50 transition-colors"
+                      className="p-4 sm:p-5 cursor-pointer hover:bg-gray-50 transition-colors"
                       onClick={() => setExpandedId(isExpanded ? null : order._id)}
                     >
-                      <div className="flex items-start justify-between gap-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div className="flex items-start gap-3 flex-1 min-w-0">
                           <div className="bg-teal-100 p-2.5 sm:p-3 rounded-xl shrink-0">
                             <FlaskConical size={18} className="text-teal-600 sm:w-5 sm:h-5" />
@@ -218,7 +266,7 @@ export default function LabDashboard() {
                           <div className="flex-1 min-w-0">
                             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1">
                               <h3 className="font-bold text-gray-800 text-sm sm:text-base break-words">{order.test_name}</h3>
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase shrink-0 whitespace-nowrap ${urgencyColor[order.urgency] || urgencyColor.routine}`}>
+                              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase shrink-0 whitespace-nowrap ${urgencyColor[order.urgency] || urgencyColor.routine}`}>
                                 {order.urgency}
                               </span>
                             </div>
@@ -229,7 +277,7 @@ export default function LabDashboard() {
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                        <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
                           <span className="bg-amber-100 text-amber-700 text-[10px] sm:text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap">Pending</span>
                           {isExpanded ? <ChevronUp size={16} className="text-gray-400 shrink-0" /> : <ChevronDown size={16} className="text-gray-400 shrink-0" />}
                         </div>
@@ -278,7 +326,7 @@ export default function LabDashboard() {
                             className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all ${
                               selectedFile ? 'border-teal-400 bg-teal-50' : 'border-gray-200 hover:border-teal-300 hover:bg-teal-50/30'
                             }`}
-                            onClick={() => fileInputRef.current?.click()}
+                            onClick={handleFileSelect}
                           >
                             <input
                               ref={fileInputRef}
@@ -385,19 +433,18 @@ export default function LabDashboard() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {order.pdf_url && (
+                      {(order.pdf_url || order._id || order.id) && (
                         <a
-                          href={order.pdf_url.startsWith('http') ? order.pdf_url : `https://ayu-disha.onrender.com${order.pdf_url.startsWith('/') ? '' : '/'}${order.pdf_url}`}
+                          href={(() => {
+                            const backendBase = (import.meta.env.VITE_API_URL || 'https://ayu-disha.onrender.com/api').replace(/\/api\/?$/, '');
+                            if (!order.pdf_url) return `${backendBase}/api/lab/orders/${order._id || order.id}/pdf`;
+                            let rawUrl = String(order.pdf_url).replace(/^["']|["']$/g, '').trim();
+                            if (/^https?:\/\//i.test(rawUrl)) return rawUrl;
+                            return `${backendBase}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
+                          })()}
                           target="_blank"
                           rel="noopener noreferrer"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            const fullUrl = order.pdf_url.startsWith('http') 
-                              ? order.pdf_url 
-                              : `https://ayu-disha.onrender.com${order.pdf_url.startsWith('/') ? '' : '/'}${order.pdf_url}`;
-                            window.open(fullUrl, '_blank');
-                          }}
-                          className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-semibold bg-blue-50 px-3 py-1.5 rounded-lg"
+                          className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-semibold bg-blue-50 px-3 py-1.5 rounded-lg cursor-pointer"
                         >
                           <ExternalLink size={12} /> PDF
                         </a>

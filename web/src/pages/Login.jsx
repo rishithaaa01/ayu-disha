@@ -148,27 +148,36 @@ export default function Login() {
 
   // Redirect after login
   const handleSuccessfulLogin = (user, token, refreshToken) => {
+    console.log('🚀 [RUNTIME DEBUG] handleSuccessfulLogin called with user:', user, 'role:', user?.role, 'roleType:', typeof user?.role, 'name:', user?.name);
     loginState(user, token, refreshToken);
-    switch (user.role) {
+    const roleLower = user?.role ? String(user.role).toLowerCase() : '';
+    switch (roleLower) {
       case 'patient':
+        console.log('🚀 [RUNTIME DEBUG] Navigating to /patient');
         navigate('/patient');
         break;
       case 'asha':
+        console.log('🚀 [RUNTIME DEBUG] Navigating to /asha');
         navigate('/asha');
         break;
       case 'doctor':
+        console.log('🚀 [RUNTIME DEBUG] Navigating to /clinician');
         navigate('/clinician');
         break;
       case 'admin':
+        console.log('🚀 [RUNTIME DEBUG] Navigating to /admin');
         navigate('/admin');
         break;
       case 'pho':
+        console.log('🚀 [RUNTIME DEBUG] Navigating to /pho');
         navigate('/pho');
         break;
       case 'lab':
+        console.log('🚀 [RUNTIME DEBUG] Navigating to /lab');
         navigate('/lab');
         break;
       default:
+        console.warn('⚠️ [RUNTIME DEBUG] Role mismatch in handleSuccessfulLogin! user.role:', user?.role, 'defaulting to /clinician');
         navigate('/clinician');
     }  };
 
@@ -179,6 +188,7 @@ export default function Login() {
     setError('');
     setSuccessMsg('');
     try {
+      console.log('🔑 [RUNTIME DEBUG] handleCredentialsLogin executing for email:', email);
       const res = await api.post('/auth/login', {
         email: email,
         password: password
@@ -186,10 +196,11 @@ export default function Login() {
       
       // Ensure user data is fresh from backend
       const userData = res.data.user;
-      console.log('Login successful - user data:', userData);
+      console.log('🔑 [RUNTIME DEBUG] Login API successful - raw user data:', userData, 'access_token:', res.data.access_token ? 'PRESENT' : 'MISSING');
       
       handleSuccessfulLogin(userData, res.data.access_token, res.data.refresh_token);
     } catch (err) {
+      console.error('❌ [RUNTIME DEBUG] handleCredentialsLogin error:', err);
       setError(err.response?.data?.detail || 'Invalid email or password.');
     } finally {
       setLoading(false);
@@ -383,17 +394,20 @@ export default function Login() {
     setLoading(true);
     setError('');
     try {
+      console.log('🔑 [RUNTIME DEBUG] handleResetPassword executing for email:', forgotEmail);
       const res = await api.post('/auth/reset-password', {
         email: forgotEmail.trim(),
         code: resetCode.trim(),
         new_password: newPassword
       });
+      console.log('🔑 [RUNTIME DEBUG] Reset Password response:', res.data);
       setSuccessMsg(res.data.message || 'Password reset successfully! Please sign in.');
       setEmail(forgotEmail);
       setStep(1);
       setActiveTab('login');
       setLoginMethod('password');
     } catch (err) {
+      console.error('❌ [RUNTIME DEBUG] handleResetPassword error:', err);
       setError(err.response?.data?.detail || 'Failed to reset password. Check the code.');
     } finally {
       setLoading(false);
@@ -579,12 +593,12 @@ export default function Login() {
 
                   {/* 1. Login with Password */}
                   {loginMethod === 'password' && (
-                    <form onSubmit={handleCredentialsLogin} className="space-y-4">
+                    <form onSubmit={handleCredentialsLogin} className="space-y-5">
                       <div className="space-y-2">
                         <label className="block text-xs font-bold uppercase tracking-wider text-gray-500">Email Address / Mobile</label>
-                        <div className="relative flex items-center border border-gray-300 rounded-xl bg-white focus-within:ring-2 focus-within:ring-[#1B6CA8] overflow-hidden">
+                        <div className="relative flex items-center border border-gray-300 rounded-xl bg-white focus-within:ring-2 focus-within:ring-[#1B6CA8] min-h-[48px] overflow-hidden">
                           <div className="pl-4 text-gray-400">
-                            <Mail size={16} />
+                            <Mail size={18} />
                           </div>
                           <input
                             id="email"
@@ -604,14 +618,14 @@ export default function Login() {
                           <button
                             type="button"
                             onClick={() => setStep(3)}
-                            className="text-xs text-[#1B6CA8] font-bold hover:underline"
+                            className="text-xs text-[#1B6CA8] font-bold hover:underline py-1"
                           >
                             Forgot Password?
                           </button>
                         </div>
-                        <div className="relative flex items-center border border-gray-300 rounded-xl bg-white focus-within:ring-2 focus-within:ring-[#1B6CA8] overflow-hidden">
+                        <div className="relative flex items-center border border-gray-300 rounded-xl bg-white focus-within:ring-2 focus-within:ring-[#1B6CA8] min-h-[48px] overflow-hidden">
                           <div className="pl-4 text-gray-400">
-                            <Lock size={16} />
+                            <Lock size={18} />
                           </div>
                           <input
                             id="password"
@@ -629,7 +643,7 @@ export default function Login() {
                         id="login-button"
                         type="submit"
                         disabled={loading}
-                        className="w-full bg-[#1B6CA8] hover:bg-[#155A8A] text-white py-3.5 rounded-xl font-bold text-sm shadow-md transition-all active:scale-[0.99] disabled:opacity-50"
+                        className="w-full bg-[#1B6CA8] hover:bg-[#155A8A] text-white py-3.5 px-5 rounded-xl font-bold text-sm shadow-md transition-all active:scale-[0.99] disabled:opacity-50 min-h-[48px] flex items-center justify-center"
                       >
                         {loading ? 'Signing In...' : 'Log In to Workspace'}
                       </button>

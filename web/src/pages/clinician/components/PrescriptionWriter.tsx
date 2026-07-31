@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Pill, Plus, X, AlertTriangle, ShieldCheck, Printer, Save, Loader2 } from 'lucide-react';
 import api from '../../../services/clinicianApi';
 import { format } from 'date-fns';
+import toast from 'react-hot-toast';
 
 interface MedicineItem {
   id: string;
@@ -83,7 +84,7 @@ export default function PrescriptionWriter({ patient, visitId, onSaved }: Prescr
 
   const handleSave = async () => {
     if (medicines.some(m => !m.name)) {
-      alert("Please fill in all medicine names.");
+      toast.error("Please fill in all medicine names.");
       return;
     }
 
@@ -94,9 +95,10 @@ export default function PrescriptionWriter({ patient, visitId, onSaved }: Prescr
         patient_id: patient.profile?.id || patient.patient_id,
         medicines: medicines.map(({ id, interaction, ...m }) => m)
       });
+      toast.success("Prescription saved successfully.");
       onSaved();
     } catch (e) {
-      alert("Failed to save prescription.");
+      toast.error("Unable to save prescription. Please try again.");
     } finally {
       setIsSaving(false);
     }

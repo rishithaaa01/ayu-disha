@@ -1,13 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import api from '../../services/clinicianApi';
 import { useClinicianStore } from '../../store/clinicianStore';
 import QueueCard from './components/QueueCard';
 import LoadingSkeleton from './components/LoadingSkeleton';
 import PatientRecordPanel from './components/PatientRecordPanel';
 import { Stethoscope, Filter, RefreshCcw, ChevronLeft } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export default function QueueScreen() {
+  const [searchParams] = useSearchParams();
+  const targetPatientId = searchParams.get('patient_id');
+  const targetReferralId = searchParams.get('referral_id');
+
   const [filter, setFilter] = useState<'all' | 'urgent' | 'watch' | 'low'>('all');
   const { setQueue, activePatient, setActivePatient } = useClinicianStore();
 
@@ -23,6 +29,47 @@ export default function QueueScreen() {
       setQueue(queueData);
     }
   }, [queueData, setQueue]);
+
+  // Synchronize activePatient strictly with targetPatientId or clear stale activePatient
+  useEffect(() => {
+    if (targetPatientId) {
+      // 1. Check if patient exists in queueData
+      const match = queueData?.find((p: any) =>
+        p.patient_id === targetPatientId || p._id === targetPatientId || p.id === targetPatientId
+      );
+
+      if (match) {
+        setActivePatient({
+          ...match,
+          referral_id: targetReferralId || match.referral_id || match.id
+        });
+      } else {
+        // 2. Patient not in current queue list yet — fetch record directly from backend
+        api.getPatientRecord(targetPatientId).then((data) => {
+          if (data) {
+            const prof = data.profile || data;
+            setActivePatient({
+              patient_id: prof.id || prof._id || targetPatientId,
+              _id: prof.id || prof._id || targetPatientId,
+              name: prof.name,
+              age: prof.age,
+              gender: prof.gender,
+              mobile: prof.mobile,
+              blood_group: prof.blood_group,
+              referral_id: targetReferralId,
+              chief_complaint: prof.chief_complaint || 'Referral consultation',
+              profile: prof,
+              vitals: data.vitals,
+              medical_history: data.medical_history,
+            });
+          }
+        }).catch(err => {
+          console.error('[ERROR] Failed to load patient record for ID:', targetPatientId, err);
+          toast.error('Unable to load requested patient record.');
+        });
+      }
+    }
+  }, [targetPatientId, targetReferralId, queueData]);
 
   // 2. Filtering Logic
   const filteredQueue = queueData?.filter((p: any) => 

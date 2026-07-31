@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import QueueScreen from './QueueScreen';
@@ -19,8 +20,11 @@ export default function ClinicianApp() {
   const { user } = useAuthStore();
   const { setDoctor } = useClinicianStore();
   const [showNotifications, setShowNotifications] = useState(false);
+  const [notifTop, setNotifTop] = useState(72);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
+  const bellRef = useRef<HTMLButtonElement>(null);
+  const notifPanelRef = useRef<HTMLDivElement>(null);
 
   // Fetch referrals for real-time notifications
   const { data: referrals = [] } = useQuery({
@@ -38,6 +42,29 @@ export default function ClinicianApp() {
       setDoctor(user);
     }
   }, [user, setDoctor]);
+
+  // Close notification panel when clicking outside
+  useEffect(() => {
+    if (!showNotifications) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (
+        bellRef.current && !bellRef.current.contains(e.target as Node) &&
+        notifPanelRef.current && !notifPanelRef.current.contains(e.target as Node)
+      ) {
+        setShowNotifications(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [showNotifications]);
+
+  // Compute panel top position from bell button's actual viewport bottom
+  useEffect(() => {
+    if (showNotifications && bellRef.current) {
+      const rect = bellRef.current.getBoundingClientRect();
+      setNotifTop(rect.bottom + 8); // 8px gap below bell button
+    }
+  }, [showNotifications]);
 
   return (
     <RealTimeUpdateProvider>
@@ -67,6 +94,7 @@ export default function ClinicianApp() {
                 
                 <div className="relative">
                   <button 
+                    ref={bellRef}
                     onClick={() => setShowNotifications(!showNotifications)}
                     className={`relative p-2 hover:bg-[#F7F3EE] rounded-full transition-colors ${showNotifications ? 'bg-[#F7F3EE]' : ''}`}
                   >
@@ -78,8 +106,8 @@ export default function ClinicianApp() {
                     )}
                   </button>
 
-                  {showNotifications && (
-                    <div className="absolute right-0 mt-3 w-72 sm:w-80 bg-white border border-[#E2DDD8] rounded-2xl shadow-xl overflow-hidden z-50 animate-fadeIn">
+                  {showNotifications && createPortal(
+                    <div ref={notifPanelRef} style={{ top: `${notifTop}px` }} className="fixed right-3 sm:right-6 w-[calc(100vw-1.5rem)] max-w-xs sm:w-80 bg-white border border-[#E2DDD8] rounded-2xl shadow-2xl overflow-hidden z-[99999] animate-fadeIn text-left text-gray-800 pointer-events-auto">
                       <div className="px-4 py-3 bg-[#F7F3EE] border-b border-[#E2DDD8] flex justify-between items-center">
                         <span className="font-bold text-xs uppercase tracking-wider text-[#666]">Notifications</span>
                         {pendingIncoming.length > 0 && (
@@ -96,7 +124,7 @@ export default function ClinicianApp() {
                               key={ref.id} 
                               onClick={() => {
                                 setShowNotifications(false);
-                                navigate('/clinician/referrals');
+                                navigate(`/clinician/referrals?id=${ref.id || ''}&type=${ref.type || 'incoming'}`);
                               }}
                               className={`p-4 hover:bg-blue-50/10 cursor-pointer transition-colors border-l-4 ${
                                 ref.urgency?.toLowerCase() === 'immediate' || ref.urgency?.toLowerCase() === 'today'
@@ -132,7 +160,8 @@ export default function ClinicianApp() {
                           </div>
                         )}
                       </div>
-                    </div>
+                    </div>,
+                    document.body
                   )}
                 </div>
               </div>
@@ -147,8 +176,8 @@ export default function ClinicianApp() {
               <Route path="referrals" element={<ReferralsScreen />} />
               <Route path="consultation/:visitId" element={<ConsultationScreen />} />
               <Route path="settings" element={<SettingsScreen />} />
-              <Route path="/" element={<Navigate to="referrals" replace />} />
-              <Route path="*" element={<Navigate to="referrals" replace />} />
+              <Route path="/" element={<Navigate to="/clinician/referrals" replace />} />
+              <Route path="*" element={<Navigate to="/clinician/referrals" replace />} />
             </Routes>
           </div>
         </main>

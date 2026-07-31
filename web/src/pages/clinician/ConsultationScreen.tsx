@@ -160,23 +160,23 @@ export default function ConsultationScreen() {
       />
 
       {/* Mobile Toggle Switcher */}
-      <div className="lg:hidden flex border-b border-[#E2DDD8] bg-white">
+      <div className="lg:hidden flex border-b border-[#E2DDD8] bg-white min-h-[48px]">
         <button
           onClick={() => setMobileView('notes')}
-          className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-all ${
+          className={`flex-1 py-3.5 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-all min-h-[48px] ${
             mobileView === 'notes' ? 'text-[#1B6CA8] border-[#1B6CA8] bg-blue-50/20' : 'text-gray-500 border-transparent'
           }`}
         >
-          <FileEdit size={16} />
+          <FileEdit size={18} />
           <span>Documentation</span>
         </button>
         <button
           onClick={() => setMobileView('support')}
-          className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-all ${
+          className={`flex-1 py-3.5 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-all min-h-[48px] ${
             mobileView === 'support' ? 'text-[#1B6CA8] border-[#1B6CA8] bg-blue-50/20' : 'text-gray-500 border-transparent'
           }`}
         >
-          <Sparkles size={16} />
+          <Sparkles size={18} />
           <span>Decision Support</span>
         </button>
       </div>

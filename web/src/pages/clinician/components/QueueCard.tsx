@@ -40,9 +40,9 @@ export default function QueueCard({ patient, isSelected, onClick, position }: Qu
     <div
       onClick={onClick}
       className={`
-        bg-white rounded-xl border-l-[6px] border border-y-[#E2DDD8] border-r-[#E2DDD8] 
-        p-4 mb-3 cursor-pointer transition-all duration-200 hover:shadow-md
-        ${isRejected ? 'border-l-red-400' : borderColors[patient.risk_tag]}
+        bg-white rounded-2xl border-l-[6px] border border-y-[#E2DDD8] border-r-[#E2DDD8] 
+        p-4 sm:p-5 mb-4 cursor-pointer transition-all duration-200 hover:shadow-md min-h-[48px]
+        ${isRejected ? 'border-l-red-500' : borderColors[patient.risk_tag]}
         ${isSelected
           ? isRejected ? 'bg-red-50 border-y-red-300 border-r-red-300' : 'bg-[#E8F4FD] border-y-[#1B6CA8] border-r-[#1B6CA8]'
           : isRejected ? 'bg-red-50/50' : 'hover:bg-[#F7F3EE]'
@@ -51,8 +51,8 @@ export default function QueueCard({ patient, isSelected, onClick, position }: Qu
     >
       {/* Rejected banner */}
       {isRejected && (
-        <div className="flex items-center gap-2 bg-red-100 text-red-700 rounded-lg px-3 py-2 mb-3 text-xs font-bold">
-          <XCircle size={14} />
+        <div className="flex items-center gap-2 bg-red-100 text-red-700 rounded-xl px-3.5 py-2.5 mb-3.5 text-xs font-bold">
+          <XCircle size={16} />
           <span>Referral Rejected</span>
           {patient.rejection_reason && (
             <span className="font-normal text-red-600 truncate">— {patient.rejection_reason}</span>
@@ -60,44 +60,44 @@ export default function QueueCard({ patient, isSelected, onClick, position }: Qu
         </div>
       )}
 
-      <div className="flex justify-between items-start mb-3">
-        <div className="flex items-center gap-3">
-          <div className="w-6 h-6 rounded-full bg-[#F7F3EE] flex items-center justify-center text-[10px] font-bold text-[#666]">
+      <div className="flex flex-wrap justify-between items-start gap-2 mb-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="w-7 h-7 rounded-full bg-[#F7F3EE] flex items-center justify-center text-xs font-bold text-[#666] shrink-0">
             #{position}
           </div>
-          <h3 className={`font-bold ${isRejected ? 'text-red-700' : 'text-[#333]'}`}>{patient.patient_name}</h3>
+          <h3 className={`font-bold text-base ${isRejected ? 'text-red-700' : 'text-[#333]'}`}>{patient.patient_name}</h3>
         </div>
         {!isRejected && <RiskBadge risk={patient.risk_tag} />}
       </div>
 
-      <div className="flex gap-2 text-xs text-[#666] mb-3">
-        <span>{patient.age} years</span>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-[#666] mb-3">
+        <span className="font-semibold">{patient.age} YRS</span>
         <span>•</span>
-        <span className="capitalize">{patient.gender}</span>
+        <span className="capitalize font-semibold">{patient.gender}</span>
       </div>
 
-      <p className="text-sm text-[#555] italic line-clamp-1 mb-4">
+      <p className="text-sm text-[#555] italic line-clamp-2 mb-4 leading-relaxed">
         "{patient.chief_complaint}"
       </p>
 
       {/* Re-book message for rejected */}
       {isRejected && (
-        <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-3 border border-amber-100">
-          <RefreshCw size={12} />
+        <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 rounded-xl px-3.5 py-2.5 mb-3 border border-amber-100">
+          <RefreshCw size={14} className="shrink-0" />
           <span>Please ask the patient to re-book a consultation</span>
         </div>
       )}
 
-      <div className="flex items-center justify-between mt-auto pt-3 border-t border-[#E2DDD8]/50">
+      <div className="flex flex-wrap items-center justify-between gap-2 mt-auto pt-3 border-t border-[#E2DDD8]/50">
         <div className="flex items-center gap-1.5">
-          <Clock size={14} className="text-[#888]" />
+          <Clock size={16} className="text-[#888]" />
           <span className="text-xs font-medium text-[#888]">
             Waiting {patient.wait_time} min
           </span>
         </div>
 
         <div className={`
-          flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-tight
+          flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-tight
           ${isRejected ? 'bg-red-50 text-red-600' : patient.appointment_type === 'referred' ? 'bg-blue-50 text-[#1B6CA8]' : 'bg-gray-50 text-[#888]'}
         `}>
           {getAppointmentIcon()}

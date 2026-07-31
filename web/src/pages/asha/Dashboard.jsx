@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
@@ -7,7 +8,7 @@ import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
 import {
   Users, Activity, MapPin, Home, ArrowUpRight, Plus, CheckCircle2,
   RefreshCcw, AlertTriangle, LogOut, FileText, ChevronRight, User,
-  Calendar, Phone, Shield, Languages, Info, Mic, Sparkles, Bell
+  Calendar, Phone, Shield, Languages, Info, Mic, Sparkles, Bell, CheckCircle
 } from 'lucide-react';
 
 function MetricCard({ title, value, change, icon: Icon, color, alert }) {
@@ -77,6 +78,7 @@ export default function AshaDashboard() {
   const [showHouseholdModal, setShowHouseholdModal] = useState(false);
   const [showVisitModal, setShowVisitModal] = useState(false);
   const [showReferralModal, setShowReferralModal] = useState(false);
+  const [sentReferralDetails, setSentReferralDetails] = useState(null);
 
   // Form States
   const [hhFamilyName, setHhFamilyName] = useState('');
@@ -548,13 +550,17 @@ export default function AshaDashboard() {
         ai_summary: refNotes || 'Patient referred for EMR consultation.',
         notes: refNotes
       };
-      await api.post('/asha/referrals', payload);
-      setSuccessMessage('Referral sent to clinician clinic-OS queue!');
+      const res = await api.post('/asha/referrals', payload);
       setShowReferralModal(false);
+      setSentReferralDetails({
+        hospital: res.to_hospital_id || refHospital,
+        speciality: res.to_speciality || 'General Medicine',
+        doctor: res.doctor_name || res.assigned_doctor || null,
+        status: 'Awaiting doctor assignment'
+      });
       setRefNotes('');
       refetchRef();
       refetchStats();
-      setTimeout(() => setSuccessMessage(''), 4000);
     } catch (err) {
       setFormError(err.response?.data?.detail || 'Failed to create referral.');
     } finally {
@@ -594,8 +600,8 @@ export default function AshaDashboard() {
                 )}
               </button>
 
-              {showBellDropdown && (
-                <div className="absolute right-0 mt-3 w-72 sm:w-80 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden z-50 animate-fadeIn text-left">
+              {showBellDropdown && createPortal(
+                <div className="fixed right-3 sm:right-6 top-[calc(env(safe-area-inset-top,0px)+4.25rem)] w-[calc(100vw-1.5rem)] max-w-xs sm:w-80 bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden z-[99999] animate-fadeIn text-left pointer-events-auto">
                 <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
                   <span className="font-bold text-xs uppercase tracking-wider text-gray-600">Village Alerts</span>
                   {unreadNotificationsCount > 0 && (
@@ -665,7 +671,8 @@ export default function AshaDashboard() {
                     View All Village Alerts
                   </button>
                 </div>
-              </div>
+              </div>,
+              document.body
             )}
           </div>
           <button
@@ -722,26 +729,26 @@ export default function AshaDashboard() {
             </p>
           </div>
           {/* Quick Actions */}
-          <div className="flex flex-wrap gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full md:w-auto">
             <button
               onClick={() => setShowHouseholdModal(true)}
-              className="bg-[#1B6CA8] hover:bg-[#155A8A] text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+              className="bg-[#1B6CA8] hover:bg-[#155A8A] text-white px-5 py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 shadow-sm min-h-[48px]"
             >
-              <Plus size={14} />
+              <Plus size={18} />
               Register Household
             </button>
             <button
               onClick={() => setShowVisitModal(true)}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+              className="bg-green-600 hover:bg-green-700 text-white px-5 py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 shadow-sm min-h-[48px]"
             >
-              <Activity size={14} />
+              <Activity size={18} />
               Log Field Visit
             </button>
             <button
               onClick={() => setShowReferralModal(true)}
-              className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+              className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 shadow-sm min-h-[48px]"
             >
-              <ArrowUpRight size={14} />
+              <ArrowUpRight size={18} />
               Send Referral
             </button>
           </div>
@@ -878,7 +885,8 @@ export default function AshaDashboard() {
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
+                {/* DESKTOP TABLE VIEW (hidden on mobile) */}
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="border-b border-gray-100 text-xs font-bold text-gray-400 uppercase tracking-wider">
@@ -948,55 +956,157 @@ export default function AshaDashboard() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* MOBILE CARD VIEW (visible only on mobile screens < md) */}
+                <div className="block md:hidden space-y-3">
+                  {filteredHouseholds.map((hh) => {
+                    const hasOffline = offlineVisits.some(ov => ov.household_id === hh.id);
+                    return (
+                      <div 
+                        key={hh.id} 
+                        className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm hover:border-[#1B6CA8]/30 transition-all space-y-3"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <h4 className="font-bold text-gray-900 text-base leading-snug break-words">{hh.family_name}</h4>
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500 mt-1">
+                              <span className="flex items-center gap-1 font-medium">
+                                <MapPin size={12} className="text-gray-400" /> {hh.village}
+                              </span>
+                              <span>•</span>
+                              <span className="flex items-center gap-1 font-medium">
+                                <Users size={12} className="text-gray-400" /> {hh.members?.length || 0} members
+                              </span>
+                            </div>
+                          </div>
+                          
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider shrink-0 ${
+                            hh.risk_level === 'red'
+                              ? 'bg-red-50 text-red-600 border border-red-100'
+                              : hh.risk_level === 'amber'
+                                ? 'bg-amber-50 text-amber-600 border border-amber-100'
+                                : 'bg-green-50 text-green-600 border border-green-100'
+                          }`}>
+                            {hh.risk_level} Risk
+                          </span>
+                        </div>
+
+                        {hasOffline && (
+                          <div className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-800 text-[11px] font-bold px-2.5 py-1 rounded-lg border border-amber-200/80">
+                            <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+                            <span>Pending Offline Sync</span>
+                          </div>
+                        )}
+
+                        <div className="pt-2 border-t border-gray-100">
+                          <button
+                            onClick={() => {
+                              setVisitHhId(hh.id);
+                              setVisitMemberName('');
+                              setShowVisitModal(true);
+                            }}
+                            className="w-full py-3 bg-[#1B6CA8]/10 hover:bg-[#1B6CA8]/20 text-[#1B6CA8] font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors min-h-[48px]"
+                          >
+                            <span>Log New Home Visit</span>
+                            <ChevronRight size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {filteredHouseholds.length === 0 && !hhLoading && (
+                    <div className="py-8 text-center text-gray-400 font-medium bg-gray-50 rounded-2xl">
+                      No households found matching your search or filters.
+                    </div>
+                  )}
+                  {hhLoading && (
+                    <div className="py-8 text-center text-gray-400 font-medium">Loading households data...</div>
+                  )}
+                </div>
               </div>
             )}
 
             {activeTab === 'referrals' && (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-gray-100 text-xs font-bold text-gray-400 uppercase tracking-wider">
-                      <th className="pb-3 pl-4">Patient Name</th>
-                      <th className="pb-3">Referred Facility</th>
-                      <th className="pb-3">Urgency</th>
-                      <th className="pb-3">Date Dispatched</th>
-                      <th className="pb-3">Clinical Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50 text-sm">
-                    {referrals?.map((ref) => (
-                      <tr key={ref.id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="py-4 pl-4 font-bold text-gray-800">{ref.patient_name}</td>
-                        <td className="py-4 text-gray-600">{ref.referred_to}</td>
-                        <td className="py-4 font-bold">
-                          <span className={`px-2 py-0.5 rounded text-xs uppercase ${
-                            ref.urgency === 'Today' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
-                          }`}>
-                            {ref.urgency}
-                          </span>
-                        </td>
-                        <td className="py-4 text-gray-500 font-semibold">{ref.sent_date}</td>
-                        <td className="py-4">
-                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold uppercase ${
-                            ref.status === 'seen'
-                              ? 'bg-green-50 text-green-600'
-                              : 'bg-yellow-50 text-yellow-600'
-                          }`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${
-                              ref.status === 'seen' ? 'bg-green-600' : 'bg-yellow-500'
-                            }`} />
-                            {ref.status}
-                          </span>
-                        </td>
+              <div>
+                {/* DESKTOP TABLE VIEW */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-gray-100 text-xs font-bold text-gray-400 uppercase tracking-wider">
+                        <th className="pb-3 pl-4">Patient Name</th>
+                        <th className="pb-3">Referred Facility</th>
+                        <th className="pb-3">Urgency</th>
+                        <th className="pb-3">Date Dispatched</th>
+                        <th className="pb-3">Clinical Status</th>
                       </tr>
-                    ))}
-                    {refLoading && (
-                      <tr>
-                        <td colSpan={5} className="py-8 text-center text-gray-400">Loading referral database queue...</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50 text-sm">
+                      {referrals?.map((ref) => (
+                        <tr key={ref.id} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="py-4 pl-4 font-bold text-gray-800">{ref.patient_name}</td>
+                          <td className="py-4 text-gray-600">{ref.referred_to}</td>
+                          <td className="py-4 font-bold">
+                            <span className={`px-2 py-0.5 rounded text-xs uppercase ${
+                              ref.urgency === 'Today' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                            }`}>
+                              {ref.urgency}
+                            </span>
+                          </td>
+                          <td className="py-4 text-gray-500 font-semibold">{ref.sent_date}</td>
+                          <td className="py-4">
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold uppercase ${
+                              ref.status === 'seen'
+                                ? 'bg-green-50 text-green-600'
+                                : 'bg-yellow-50 text-yellow-600'
+                            }`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${
+                                ref.status === 'seen' ? 'bg-green-600' : 'bg-yellow-500'
+                              }`} />
+                              {ref.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      {refLoading && (
+                        <tr>
+                          <td colSpan={5} className="py-8 text-center text-gray-400">Loading referral database queue...</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* MOBILE CARD VIEW */}
+                <div className="block md:hidden space-y-3">
+                  {referrals?.map((ref) => (
+                    <div key={ref.id} className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm space-y-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h4 className="font-bold text-gray-900 text-base">{ref.patient_name}</h4>
+                          <p className="text-xs text-gray-500 mt-0.5">Referred to: <span className="font-semibold text-gray-700">{ref.referred_to}</span></p>
+                        </div>
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase shrink-0 ${
+                          ref.urgency === 'Today' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {ref.urgency}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500 pt-2 border-t border-gray-100">
+                        <span>Sent: {ref.sent_date}</span>
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
+                          ref.status === 'seen' ? 'bg-green-50 text-green-600' : 'bg-yellow-50 text-yellow-600'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${ref.status === 'seen' ? 'bg-green-600' : 'bg-yellow-500'}`} />
+                          {ref.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  {refLoading && (
+                    <div className="py-8 text-center text-gray-400 font-medium">Loading referral database queue...</div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -1511,6 +1621,52 @@ export default function AshaDashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Referral Destination Success Modal */}
+      {sentReferralDetails && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-gray-100 animate-fadeIn">
+            <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center text-green-600 mb-4 mx-auto">
+              <CheckCircle size={32} />
+            </div>
+            
+            <h3 className="text-xl font-bold text-gray-900 text-center mb-1 font-mukta">
+              Referral Created Successfully
+            </h3>
+            <p className="text-xs text-gray-500 text-center mb-6">
+              Patient has been routed to the receiving hospital queue.
+            </p>
+
+            <div className="bg-gray-50/80 rounded-2xl p-4 border border-gray-100 space-y-3 mb-6">
+              <div className="flex justify-between items-start text-xs border-b border-gray-200/60 pb-2">
+                <span className="text-gray-500 font-medium uppercase tracking-wider text-[10px]">Hospital</span>
+                <span className="font-bold text-gray-800 text-right max-w-[200px]">{sentReferralDetails.hospital}</span>
+              </div>
+              
+              <div className="flex justify-between items-start text-xs border-b border-gray-200/60 pb-2">
+                <span className="text-gray-500 font-medium uppercase tracking-wider text-[10px]">Department</span>
+                <span className="font-bold text-[#1B6CA8] text-right">{sentReferralDetails.speciality}</span>
+              </div>
+
+              <div className="flex justify-between items-start text-xs">
+                <span className="text-gray-500 font-medium uppercase tracking-wider text-[10px]">
+                  {sentReferralDetails.doctor ? 'Assigned Doctor' : 'Status'}
+                </span>
+                <span className={`font-bold text-right ${sentReferralDetails.doctor ? 'text-purple-700' : 'text-amber-700'}`}>
+                  {sentReferralDetails.doctor ? `Dr. ${sentReferralDetails.doctor}` : sentReferralDetails.status}
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setSentReferralDetails(null)}
+              className="w-full bg-[#1B6CA8] hover:bg-[#155A8A] text-white py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all min-h-[48px] shadow-md shadow-[#1B6CA8]/20"
+            >
+              Done
+            </button>
           </div>
         </div>
       )}

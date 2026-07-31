@@ -29,9 +29,18 @@ export const initializeCapacitor = async () => {
       console.log('App state changed. Is active:', isActive);
     });
     
-    // Handle Android hardware back button
+    // Handle Android hardware back button under HashRouter
     App.addListener('backButton', ({ canGoBack }) => {
-      if (!canGoBack || window.location.pathname === '/' || window.location.pathname === '/login') {
+      const hash = window.location.hash || '';
+      const isAtLoginOrRoot = !hash || hash === '#/' || hash === '#/login' || hash === '#/login/';
+      console.log('📱 [RUNTIME DEBUG] Capacitor backButton listener fired!', {
+        pathname: window.location.pathname,
+        hash,
+        canGoBack,
+        isAtLoginOrRoot
+      });
+      if (!canGoBack || isAtLoginOrRoot) {
+        console.warn('📱 [RUNTIME DEBUG] Exiting app because hash is at root or /login! Hash:', hash);
         App.exitApp();
       } else {
         window.history.back();

@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
+import toast from 'react-hot-toast';
 
 export function useVoiceRecorder() {
   const [isRecording, setIsRecording] = useState(false);
@@ -42,7 +43,7 @@ export function useVoiceRecorder() {
 
     } catch (err) {
       console.error("Recording error:", err);
-      alert("Microphone access denied or error occurred.");
+      toast.error("Microphone access denied. Please enable microphone permissions in app settings.");
     }
   }, []);
 

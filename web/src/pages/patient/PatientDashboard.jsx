@@ -133,7 +133,7 @@ export default function PatientDashboard() {
               <Link
                 key={to}
                 to={to}
-                className="flex flex-col items-center justify-center p-3.5 sm:p-5 rounded-2xl border bg-white hover:shadow-md transition-all space-y-2.5 sm:space-y-3 group"
+                className="flex flex-col items-center justify-center p-4 sm:p-5 rounded-2xl border bg-white hover:shadow-md transition-all space-y-2.5 sm:space-y-3 group min-h-[76px]"
               >
                 {inner}
               </Link>
@@ -141,7 +141,7 @@ export default function PatientDashboard() {
               <button
                 key={id}
                 onClick={action}
-                className="flex flex-col items-center justify-center p-3.5 sm:p-5 rounded-2xl border bg-white hover:shadow-md transition-all space-y-2.5 sm:space-y-3 group w-full h-full"
+                className="flex flex-col items-center justify-center p-4 sm:p-5 rounded-2xl border bg-white hover:shadow-md transition-all space-y-2.5 sm:space-y-3 group w-full h-full min-h-[76px]"
               >
                 {inner}
               </button>

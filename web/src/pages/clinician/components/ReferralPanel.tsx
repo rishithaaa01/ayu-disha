@@ -20,6 +20,7 @@ export default function ReferralPanel({ patient, visitId, symptoms, diagnoses }:
   const [urgency, setUrgency] = useState('routine');
   const [reason, setReason] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [sentReferralDetails, setSentReferralDetails] = useState<any | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Fetch all registered hospitals
@@ -103,7 +104,7 @@ export default function ReferralPanel({ patient, visitId, symptoms, diagnoses }:
     }
     setIsSending(true);
     try {
-      await api.sendReferral({
+      const res = await api.sendReferral({
         visit_id: visitId,
         patient_id: patient.profile?.id || patient.patient_id,
         to_hospital_id: toHospital,
@@ -112,12 +113,21 @@ export default function ReferralPanel({ patient, visitId, symptoms, diagnoses }:
         urgency: urgency,
         summary: `Referral for ${speciality}. ${reason}`
       });
-      toast.success('Referral sent successfully');
+
+      setSentReferralDetails({
+        patient_name: patient.profile?.name || patient.patient_name || 'Patient',
+        hospital: res.to_hospital_id || toHospital,
+        speciality: res.to_speciality || speciality,
+        doctor: res.assigned_doctor || null,
+        status: res.referral_status || 'Awaiting doctor assignment'
+      });
+
+      toast.success('Referral created successfully');
       setReason('');
       setToHospital('');
       setHospitalSearch('');
     } catch (e) {
-      toast.error('Failed to send referral');
+      toast.error('Unable to send referral. Please try again.');
     } finally {
       setIsSending(false);
     }
@@ -265,6 +275,52 @@ export default function ReferralPanel({ patient, visitId, symptoms, diagnoses }:
            <span className="text-[10px] italic font-medium">This will notify the receiving hospital.</span>
         </div>
       </div>
+
+      {/* Referral Destination Success Modal */}
+      {sentReferralDetails && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-gray-100 animate-fadeIn">
+            <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center text-green-600 mb-4 mx-auto">
+              <Check size={32} />
+            </div>
+            
+            <h3 className="text-xl font-bold text-gray-900 text-center mb-1 font-mukta">
+              Referral Created Successfully
+            </h3>
+            <p className="text-xs text-gray-500 text-center mb-6">
+              Patient <span className="font-semibold text-gray-800">{sentReferralDetails.patient_name}</span> has been routed to the receiving facility.
+            </p>
+
+            <div className="bg-gray-50/80 rounded-2xl p-4 border border-gray-100 space-y-3 mb-6">
+              <div className="flex justify-between items-start text-xs border-b border-gray-200/60 pb-2">
+                <span className="text-gray-500 font-medium uppercase tracking-wider text-[10px]">Hospital</span>
+                <span className="font-bold text-gray-800 text-right max-w-[200px]">{sentReferralDetails.hospital}</span>
+              </div>
+              
+              <div className="flex justify-between items-start text-xs border-b border-gray-200/60 pb-2">
+                <span className="text-gray-500 font-medium uppercase tracking-wider text-[10px]">Specialty / Dept</span>
+                <span className="font-bold text-[#1B6CA8] text-right">{sentReferralDetails.speciality}</span>
+              </div>
+
+              <div className="flex justify-between items-start text-xs">
+                <span className="text-gray-500 font-medium uppercase tracking-wider text-[10px]">
+                  {sentReferralDetails.doctor ? 'Assigned Doctor' : 'Status'}
+                </span>
+                <span className={`font-bold text-right ${sentReferralDetails.doctor ? 'text-purple-700' : 'text-amber-700'}`}>
+                  {sentReferralDetails.doctor ? `Dr. ${sentReferralDetails.doctor}` : sentReferralDetails.status}
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setSentReferralDetails(null)}
+              className="w-full bg-[#1B6CA8] hover:bg-[#155A8A] text-white py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all min-h-[48px] shadow-md shadow-[#1B6CA8]/20"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

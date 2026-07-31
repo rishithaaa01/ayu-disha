@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../../services/clinicianApi';
 import { useRealTimeUpdates } from '../../contexts/RealTimeUpdateContext';
 import toast from 'react-hot-toast';
@@ -50,32 +50,60 @@ import { useAuthStore } from '../../store/authStore';
 export default function ReferralsScreen() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const targetReferralId = searchParams.get('id');
+  const targetType = searchParams.get('type') as 'incoming' | 'outgoing' | null;
+
   const { user } = useAuthStore();
   const { notifyReferralAccepted, updateReferralCounts } = useRealTimeUpdates();
   const [activeTab, setActiveTab] = useState<'incoming' | 'outgoing'>('incoming');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [rejectModalReferralId, setRejectModalReferralId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState<string>('');
 
   // Fetch referrals
   const { data: referrals = [], isLoading, refetch } = useQuery({
     queryKey: ['doctorReferrals'],
     queryFn: async () => {
       const data = await api.getReferrals();
-
-      // Ensure we have an array
       const referralsArray = Array.isArray(data) ? data : [];
-
-      // Sort by created_date descending (most recent first)
       return referralsArray.sort((a: any, b: any) => {
         const dateA = new Date(a.created_date).getTime();
         const dateB = new Date(b.created_date).getTime();
         return dateB - dateA;
       });
     },
-    refetchInterval: 30000, // Refetch every 30 seconds
+    refetchInterval: 30000,
     refetchOnWindowFocus: true,
     staleTime: 10000,
     retry: 2,
   });
+
+  // Auto-switch tab, reset filter, and scroll to target referral if navigated from notification
+  useEffect(() => {
+    if (targetType === 'incoming' || targetType === 'outgoing') {
+      setActiveTab(targetType);
+    }
+    if (targetReferralId && referrals.length > 0) {
+      const targetRef = referrals.find((r: Referral) => r.id === targetReferralId);
+      if (targetRef) {
+        if (targetRef.type !== activeTab) {
+          setActiveTab(targetRef.type);
+        }
+        if (filterStatus !== 'all') {
+          setFilterStatus('all');
+        }
+        setTimeout(() => {
+          const el = document.getElementById(`referral-card-${targetReferralId}`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 150);
+      } else {
+        toast.error("Referral record not found or has been processed.", { id: 'ref-not-found' });
+      }
+    }
+  }, [searchParams, referrals]);
 
   // Accept referral mutation
   const acceptMutation = useMutation({
@@ -83,10 +111,10 @@ export default function ReferralsScreen() {
     onSuccess: () => {
       notifyReferralAccepted();
       refetch();
-      toast.success('Referral accepted successfully');
+      toast.success('Referral accepted. Patient added to your OPD queue.');
     },
     onError: (err: any) => {
-      const errorMsg = err.response?.data?.detail || 'Failed to accept referral';
+      const errorMsg = err.response?.data?.detail || 'Unable to accept referral. Please try again.';
       toast.error(errorMsg);
     },
   });
@@ -96,13 +124,14 @@ export default function ReferralsScreen() {
     mutationFn: ({ referralId, reason }: { referralId: string; reason: string }) =>
       api.rejectReferral(referralId, reason),
     onSuccess: () => {
-      toast.success('Referral rejected');
-      // Explicitly refetch to update stats immediately
+      toast.success('Referral status updated to rejected.');
+      setRejectModalReferralId(null);
+      setRejectReason('');
       refetch();
       queryClient.invalidateQueries({ queryKey: ['doctorReferrals'] });
     },
     onError: () => {
-      toast.error('Failed to reject referral');
+      toast.error('Unable to reject referral. Please try again.');
     },
   });
 
@@ -137,16 +166,20 @@ export default function ReferralsScreen() {
   };
 
   const handleAccept = (referralId: string) => {
-    if (window.confirm('Accept this referral? The patient will be added to your queue.')) {
-      acceptMutation.mutate(referralId);
-    }
+    acceptMutation.mutate(referralId);
   };
 
   const handleReject = (referralId: string) => {
-    const reason = window.prompt('Reason for rejection (optional):');
-    if (reason !== null) {
-      rejectMutation.mutate({ referralId, reason: reason || 'No reason provided' });
-    }
+    setRejectModalReferralId(referralId);
+    setRejectReason('');
+  };
+
+  const submitRejection = () => {
+    if (!rejectModalReferralId) return;
+    rejectMutation.mutate({
+      referralId: rejectModalReferralId,
+      reason: rejectReason.trim() || 'No reason provided'
+    });
   };
 
   const stats = {
@@ -233,39 +266,39 @@ export default function ReferralsScreen() {
 
       {/* Tabs and Filters */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm mb-6">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:px-6 sm:py-4 border-b border-gray-100">
           {/* Tabs */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 w-full sm:w-auto">
             <button
               onClick={() => setActiveTab('incoming')}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+              className={`flex-1 sm:flex-none px-4 sm:px-5 py-3 rounded-xl text-sm font-semibold transition-colors min-h-[48px] flex items-center justify-center ${
                 activeTab === 'incoming'
-                  ? 'bg-[#1B6CA8] text-white'
+                  ? 'bg-[#1B6CA8] text-white shadow-sm'
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
-              <ArrowDownLeft size={16} className="inline mr-2" />
-              Incoming ({stats.incoming})
+              <ArrowDownLeft size={18} className="inline mr-1.5 shrink-0" />
+              <span>Incoming ({stats.incoming})</span>
             </button>
             <button
               onClick={() => setActiveTab('outgoing')}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+              className={`flex-1 sm:flex-none px-4 sm:px-5 py-3 rounded-xl text-sm font-semibold transition-colors min-h-[48px] flex items-center justify-center ${
                 activeTab === 'outgoing'
-                  ? 'bg-[#1B6CA8] text-white'
+                  ? 'bg-[#1B6CA8] text-white shadow-sm'
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
-              <ArrowUpRight size={16} className="inline mr-2" />
-              Outgoing ({stats.outgoing})
+              <ArrowUpRight size={18} className="inline mr-1.5 shrink-0" />
+              <span>Outgoing ({stats.outgoing})</span>
             </button>
           </div>
 
-          {/* Status Filter */}
-          <div className="flex items-center gap-2">
+          {/* Status Filter & Refresh Button */}
+          <div className="flex items-center gap-2.5 w-full sm:w-auto">
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#1B6CA8] focus:border-transparent outline-none bg-white"
+              className="flex-1 sm:flex-none px-3.5 sm:px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#1B6CA8] focus:border-transparent outline-none bg-white min-h-[48px]"
             >
               <option value="all">All Status</option>
               <option value="pending">Pending</option>
@@ -276,10 +309,10 @@ export default function ReferralsScreen() {
             
             <button
               onClick={() => { refetch(); updateReferralCounts(); }}
-              className="px-4 py-2 bg-[#1B6CA8] hover:bg-[#155A8A] text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
+              className="px-4 sm:px-5 py-3 bg-[#1B6CA8] hover:bg-[#155A8A] text-white rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2 min-h-[48px] shrink-0"
             >
               <RefreshCw size={16} />
-              Refresh
+              <span>Refresh</span>
             </button>
           </div>
         </div>
@@ -306,72 +339,87 @@ export default function ReferralsScreen() {
           </div>
         ) : (
           <div className="divide-y divide-gray-100">
-            {filteredReferrals.map((referral: Referral) => (
-              <div key={referral.id} className="px-6 py-4 hover:bg-gray-50 transition-colors">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-start gap-4 flex-1">
-                    {/* Patient Info */}
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-500 to-teal-500 flex items-center justify-center text-white font-bold shrink-0">
-                      {referral.patient_name?.charAt(0).toUpperCase() || 'P'}
+            {filteredReferrals.map((referral: Referral) => {
+              const isSelected = referral.id === targetReferralId;
+              return (
+                <div 
+                  id={`referral-card-${referral.id}`}
+                  key={referral.id} 
+                  className={`p-4 sm:p-6 transition-all duration-300 ${
+                    isSelected ? 'bg-blue-50/50 ring-2 ring-[#1B6CA8] rounded-xl my-1 shadow-md' : 'hover:bg-gray-50/80'
+                  }`}
+                >
+                  <div className="flex flex-col gap-3.5">
+                    {/* ROW 1: Avatar & Patient Demographics */}
+                    <div className="flex items-start gap-3">
+                      <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-green-500 to-teal-600 flex items-center justify-center text-white font-bold text-base shrink-0 shadow-sm">
+                        {referral.patient_name?.charAt(0).toUpperCase() || 'P'}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-bold text-gray-900 text-base leading-snug break-words">{referral.patient_name}</h4>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500 mt-0.5">
+                          {referral.patient_age && referral.patient_gender && (
+                            <span className="font-semibold text-gray-700">{referral.patient_age}Y • {referral.patient_gender}</span>
+                          )}
+                          {referral.patient_mobile && (
+                            <span className="flex items-center gap-1 text-gray-500">
+                              <Phone size={12} className="text-gray-400" /> {referral.patient_mobile}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h4 className="font-bold text-gray-800">{referral.patient_name}</h4>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${getUrgencyColor(referral.urgency)}`}>
-                          {referral.urgency}
+
+                    {/* ROW 2: Status & Department Badges (Flex-Wrap Row) */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase border tracking-wider ${getUrgencyColor(referral.urgency)}`}>
+                        {referral.urgency}
+                      </span>
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${getStatusColor(referral.status)}`}>
+                        {referral.status}
+                      </span>
+                      {referral.to_speciality && (
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-[#EBF5FB] text-[#1B6CA8] border border-blue-200">
+                          {referral.to_speciality}
                         </span>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${getStatusColor(referral.status)}`}>
-                          {referral.status}
+                      )}
+                      {referral.to_speciality && user?.speciality && referral.to_speciality.toLowerCase() === user.speciality.toLowerCase() && (
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700 border border-purple-200 flex items-center gap-1 animate-pulse">
+                          ✨ Matches Your Speciality
                         </span>
-                        {referral.to_speciality && (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EBF5FB] text-[#1B6CA8] border border-blue-200">
-                            {referral.to_speciality}
-                          </span>
-                        )}
-                        {referral.to_speciality && user?.speciality && referral.to_speciality.toLowerCase() === user.speciality.toLowerCase() && (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-705 border border-purple-200 flex items-center gap-1 animate-pulse">
-                            ✨ Matches Your Speciality
-                          </span>
-                        )}
+                      )}
+                    </div>
+
+                    {/* ROW 3: Date & Reason for Referral */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-1.5 text-xs text-gray-500 font-medium">
+                        <Calendar size={13} className="text-gray-400" />
+                        <span>{format(new Date(referral.created_date), 'dd MMM yyyy • HH:mm')}</span>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500 mb-2">
-                        {referral.patient_age && referral.patient_gender && (
-                          <span>{referral.patient_age}Y, {referral.patient_gender}</span>
-                        )}
-                        {referral.patient_mobile && (
-                          <span className="flex items-center gap-1">
-                            <Phone size={11} /> {referral.patient_mobile}
-                          </span>
-                        )}
-                        <span className="flex items-center gap-1">
-                          <Calendar size={11} /> {format(new Date(referral.created_date), 'dd MMM yyyy, HH:mm')}
-                        </span>
-                      </div>
-
-                      <div className="bg-gray-50 rounded-lg p-3 mb-2">
-                        <p className="text-xs font-semibold text-gray-700 mb-1">Reason for Referral:</p>
-                        <p className="text-sm text-gray-800">{referral.reason}</p>
+                      <div className="bg-gray-50 rounded-xl p-3.5 border border-gray-100/80 space-y-1">
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500">Reason for Referral:</p>
+                        <p className="text-xs sm:text-sm font-medium text-gray-800 leading-relaxed">{referral.reason}</p>
                         {referral.notes && (
-                          <p className="text-xs text-gray-600 mt-2">
-                            <span className="font-semibold">Notes:</span> {referral.notes}
+                          <p className="text-xs text-gray-600 pt-1 border-t border-gray-200/60 mt-1.5">
+                            <span className="font-semibold text-gray-700">Notes:</span> {referral.notes}
                           </p>
                         )}
                       </div>
 
-                      <div className="flex flex-wrap gap-4 text-xs text-gray-600">
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600 font-medium pt-1">
                         {activeTab === 'incoming' ? (
                           <>
                             {referral.asha_name && (
-                              <span className="flex items-center gap-1">
-                                <Home size={11} className="text-blue-600" />
+                              <span className="flex items-center gap-1 text-blue-700 font-semibold">
+                                <Home size={13} className="text-blue-600" />
                                 Referred by ASHA: {referral.asha_name}
                               </span>
                             )}
                             {referral.from_facility && (
-                              <span className="flex items-center gap-1">
-                                <Building2 size={11} className="text-gray-500" />
+                              <span className="flex items-center gap-1 text-gray-600">
+                                <Building2 size={13} className="text-gray-400" />
                                 From: {referral.from_facility}
                               </span>
                             )}
@@ -379,14 +427,14 @@ export default function ReferralsScreen() {
                         ) : (
                           <>
                             {referral.to_doctor && (
-                              <span className="flex items-center gap-1">
-                                <User size={11} className="text-purple-600" />
+                              <span className="flex items-center gap-1 text-purple-700 font-semibold">
+                                <User size={13} className="text-purple-600" />
                                 To: Dr. {referral.to_doctor}
                               </span>
                             )}
                             {referral.to_facility && (
-                              <span className="flex items-center gap-1">
-                                <Building2 size={11} className="text-gray-500" />
+                              <span className="flex items-center gap-1 text-gray-600">
+                                <Building2 size={13} className="text-gray-400" />
                                 Facility: {referral.to_facility}
                               </span>
                             )}
@@ -394,49 +442,93 @@ export default function ReferralsScreen() {
                         )}
                       </div>
                     </div>
-                  </div>
 
-                  {/* Action Buttons */}
-                  <div className="flex gap-2 shrink-0 flex-col items-end">
-                    {/* Pending incoming: Accept / Reject */}
-                    {activeTab === 'incoming' && referral.status === 'pending' && (
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleAccept(referral.id)}
-                          disabled={acceptMutation.isPending}
-                          className="flex items-center gap-1 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
-                        >
-                          <CheckCircle size={14} />
-                          Accept
-                        </button>
-                        <button
-                          onClick={() => handleReject(referral.id)}
-                          disabled={rejectMutation.isPending}
-                          className="flex items-center gap-1 px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
-                        >
-                          <XCircle size={14} />
-                          Reject
-                        </button>
+                    {/* ROW 4: Action Buttons (FULL WIDTH ON MOBILE, 100% OWN ROW) */}
+                    {( (activeTab === 'incoming' && referral.status === 'pending') || 
+                       (activeTab === 'incoming' && referral.status === 'accepted') ) && (
+                      <div className="pt-2 border-t border-gray-100">
+                        {activeTab === 'incoming' && referral.status === 'pending' && (
+                          <div className="flex gap-3">
+                            <button
+                              onClick={() => handleAccept(referral.id)}
+                              disabled={acceptMutation.isPending}
+                              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-bold transition-all min-h-[48px] shadow-sm disabled:opacity-50"
+                            >
+                              <CheckCircle size={16} />
+                              Accept Referral
+                            </button>
+                            <button
+                              onClick={() => handleReject(referral.id)}
+                              disabled={rejectMutation.isPending}
+                              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl text-xs font-bold border border-red-200/80 transition-all min-h-[48px] disabled:opacity-50"
+                            >
+                              <XCircle size={16} />
+                              Reject
+                            </button>
+                          </div>
+                        )}
+
+                        {activeTab === 'incoming' && referral.status === 'accepted' && (
+                          <button
+                            onClick={() => {
+                              navigate(`/clinician/queue?patient_id=${referral.patient_id}&referral_id=${referral.id}`);
+                            }}
+                            className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3.5 bg-[#1B6CA8] hover:bg-[#155A8A] text-white rounded-xl text-xs sm:text-sm font-bold transition-all min-h-[48px] shadow-md shadow-[#1B6CA8]/20 active:scale-[0.99]"
+                          >
+                            <Stethoscope size={18} />
+                            Start Consultation
+                          </button>
+                        )}
                       </div>
-                    )}
-
-                    {/* Accepted incoming: Start Consultation */}
-                    {activeTab === 'incoming' && referral.status === 'accepted' && (
-                      <button
-                        onClick={() => navigate('/clinician/queue')}
-                        className="flex items-center gap-1.5 px-4 py-2 bg-[#1B6CA8] hover:bg-[#155A8A] text-white rounded-lg text-xs font-semibold transition-colors shadow-sm shadow-[#1B6CA8]/30"
-                      >
-                        <Stethoscope size={14} />
-                        Start Consultation
-                      </button>
                     )}
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
+
+      {/* Rejection Modal */}
+      {rejectModalReferralId && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl border border-gray-100">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-gray-800 text-lg">Reject Referral</h3>
+              <button 
+                onClick={() => setRejectModalReferralId(null)}
+                className="text-gray-400 hover:text-gray-600 font-bold p-1"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">
+              Please provide a reason for rejecting this referral (optional):
+            </p>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="e.g. Bed capacity full, Referred to specialized facility..."
+              className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 mb-4 min-h-[90px]"
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => setRejectModalReferralId(null)}
+                className="flex-1 py-3 px-4 rounded-xl border border-gray-200 text-xs font-bold text-gray-600 hover:bg-gray-50 transition-colors min-h-[44px]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitRejection}
+                disabled={rejectMutation.isPending}
+                className="flex-1 py-3 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-colors min-h-[44px] shadow-sm disabled:opacity-50"
+              >
+                {rejectMutation.isPending ? 'Rejecting...' : 'Confirm Rejection'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

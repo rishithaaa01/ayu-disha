@@ -15,25 +15,31 @@ import LabDashboard from './pages/lab/Dashboard';
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { isAuthenticated, user } = useAuthStore();
+  const normalizedUserRole = user?.role ? String(user.role).toLowerCase() : null;
+  const normalizedAllowedRoles = allowedRoles ? allowedRoles.map(r => String(r).toLowerCase()) : null;
   
-  console.log('🔐 ProtectedRoute check:', {
+  console.log('🔐 [RUNTIME DEBUG] ProtectedRoute check:', {
     isAuthenticated,
     userRole: user?.role,
+    normalizedUserRole,
     allowedRoles,
-    userName: user?.name
+    normalizedAllowedRoles,
+    userName: user?.name,
+    locationHash: window.location.hash,
+    locationPathname: window.location.pathname
   });
   
   if (!isAuthenticated) {
-    console.log('❌ Not authenticated, redirecting to login');
+    console.warn('❌ [RUNTIME DEBUG] ProtectedRoute: NOT authenticated! Redirecting to /login from hash:', window.location.hash);
     return <Navigate to="/login" replace />;
   }
   
-  if (allowedRoles && !allowedRoles.includes(user?.role)) {
-    console.log('❌ Role not allowed, redirecting to login');
+  if (normalizedAllowedRoles && (!normalizedUserRole || !normalizedAllowedRoles.includes(normalizedUserRole))) {
+    console.warn('❌ [RUNTIME DEBUG] ProtectedRoute: Role mismatch! user.role:', user?.role, 'allowedRoles:', allowedRoles, 'Redirecting to /login from hash:', window.location.hash);
     return <Navigate to="/login" replace />;
   }
   
-  console.log('✅ Access granted, rendering protected content');
+  console.log('✅ [RUNTIME DEBUG] ProtectedRoute Access granted, rendering protected content for role:', user?.role);
   return children;
 }
 

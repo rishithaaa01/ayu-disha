@@ -45,27 +45,27 @@ export default function PatientRecordPanel({ patientId, initialData }: PatientRe
 
   const handleStartConsultation = async () => {
     try {
-      console.log('[DEBUG] Starting consultation for patient:', patientId);
+      const targetPatientId = patientId || initialData?.patient_id || initialData?._id;
+      const targetReferralId = initialData?.referral_id || initialData?.id;
+
+      console.log('[DEBUG] Starting consultation for patient:', targetPatientId, 'referral:', targetReferralId);
       
       const res = await api.startVisit({
-        patient_id: patientId,
-        chief_complaint: initialData.chief_complaint,
-        referral_id: initialData.referral_id
+        patient_id: targetPatientId,
+        chief_complaint: initialData?.chief_complaint || 'Referral consultation',
+        referral_id: targetReferralId
       });
       
       console.log('[DEBUG] Consultation started, visit ID:', res.id);
       
-      // Use the real-time update system
       notifyConsultationStarted();
-      
-      // Navigate to consultation screen
       setActiveVisitId(res.id);
       navigate(`/clinician/consultation/${res.id}`);
       
       console.log('[DEBUG] Successfully started consultation and updated counts');
     } catch (e) {
       console.error('[ERROR] Failed to start consultation:', e);
-      alert("Failed to start consultation");
+      toast.error("Unable to start consultation. Please try again.");
     }
   };
 
@@ -107,13 +107,13 @@ export default function PatientRecordPanel({ patientId, initialData }: PatientRe
         />
 
         {/* Tabs Bar */}
-        <div className="flex px-8 border-b border-[#E2DDD8] sticky top-0 bg-white z-[5]">
+        <div className="flex px-4 sm:px-8 border-b border-[#E2DDD8] sticky top-0 bg-white z-[5] overflow-x-auto custom-scrollbar min-h-[48px]">
           {tabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
               className={`
-                flex items-center gap-2 px-6 py-4 text-sm font-bold border-b-2 transition-all
+                flex items-center gap-2 px-4 sm:px-6 py-3.5 text-xs sm:text-sm font-bold border-b-2 transition-all whitespace-nowrap min-h-[48px]
                 ${activeTab === tab.id 
                   ? 'border-[#1B6CA8] text-[#1B6CA8]' 
                   : 'border-transparent text-[#888] hover:text-[#555]'}
@@ -126,45 +126,45 @@ export default function PatientRecordPanel({ patientId, initialData }: PatientRe
         </div>
 
         {/* Tab Content */}
-        <div className="p-8">
+        <div className="p-4 sm:p-8">
           {activeTab === 'history' && (
             <div className="space-y-6">
               {record.visits?.length > 0 ? (
                 (record.visits || []).map((visit: any, idx: number) => (
-                  <div key={visit.id} className="relative pl-8">
+                  <div key={visit.id} className="relative pl-6 sm:pl-8">
                     {/* Timeline Line */}
-                    <div className="absolute left-3 top-2 bottom-0 w-0.5 bg-[#F7F3EE]" />
+                    <div className="absolute left-2.5 sm:left-3 top-2 bottom-0 w-0.5 bg-[#F7F3EE]" />
                     {/* Timeline Dot */}
                     <div className={`
-                      absolute left-0 top-1 w-6 h-6 rounded-full border-4 border-white shadow-sm
+                      absolute left-0 top-1 w-5 h-5 sm:w-6 sm:h-6 rounded-full border-4 border-white shadow-sm
                       ${idx === 0 ? 'bg-[#1B6CA8]' : 'bg-[#D5D8DC]'}
                     `} />
                     
-                    <div className="bg-[#FDFEFE] border border-[#E2DDD8] rounded-xl p-5 hover:border-[#1B6CA8]/50 transition-colors">
-                      <div className="flex justify-between mb-4">
+                    <div className="bg-[#FDFEFE] border border-[#E2DDD8] rounded-2xl p-4 sm:p-6 hover:border-[#1B6CA8]/50 transition-colors shadow-sm">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-4">
                         <div>
-                          <h5 className="font-bold text-[#333]">{format(new Date(visit.date), 'dd MMMM yyyy')}</h5>
-                          <p className="text-xs text-[#1B6CA8] font-bold mt-1">{visit.hospital_name || 'General Clinic'}</p>
+                          <h5 className="font-bold text-[#333] text-base">{format(new Date(visit.date), 'dd MMMM yyyy')}</h5>
+                          <p className="text-xs text-[#1B6CA8] font-bold mt-0.5">{visit.hospital_name || 'General Clinic'}</p>
                         </div>
                         <span className="text-xs text-[#888] italic">seen by {visit.doctor_name || 'Dr. Iyer'}</span>
                       </div>
                       
-                      <div className="grid grid-cols-2 gap-6 text-sm">
-                        <div className="bg-[#FBFCFC] p-3 rounded-lg">
-                          <p className="text-[10px] font-bold text-[#888] uppercase mb-1">Chief Complaint</p>
-                          <p className="text-[#333] italic">"{visit.chief_complaint}"</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6 text-sm">
+                        <div className="bg-[#FBFCFC] p-3.5 rounded-xl border border-gray-100">
+                          <p className="text-[10px] font-bold text-[#888] uppercase tracking-wider mb-1">Chief Complaint</p>
+                          <p className="text-[#333] italic text-xs sm:text-sm">"{visit.chief_complaint}"</p>
                         </div>
-                        <div className="bg-[#FBFCFC] p-3 rounded-lg">
-                          <p className="text-[10px] font-bold text-[#888] uppercase mb-1">Diagnoses</p>
+                        <div className="bg-[#FBFCFC] p-3.5 rounded-xl border border-gray-100">
+                          <p className="text-[10px] font-bold text-[#888] uppercase tracking-wider mb-1">Diagnoses</p>
                           <div className="flex flex-wrap gap-1 mt-1">
                             {visit.diagnosis?.length > 0 ? (
                               visit.diagnosis.map((d: string) => (
-                                <span key={d} className="bg-[#EBF5FB] text-[#1B6CA8] px-2 py-0.5 rounded text-[11px] font-bold">
+                                <span key={d} className="bg-[#EBF5FB] text-[#1B6CA8] px-2.5 py-0.5 rounded-lg text-[11px] font-bold">
                                   {d}
                                 </span>
                               ))
                             ) : (
-                              <span className="text-[#888] italic">No final diagnosis recorded</span>
+                              <span className="text-[#888] italic text-xs">No final diagnosis recorded</span>
                             )}
                           </div>
                         </div>
@@ -251,16 +251,18 @@ export default function PatientRecordPanel({ patientId, initialData }: PatientRe
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        {lab.pdf_url && (
+                        {(lab.pdf_url || lab._id || lab.id) && (
                           <a
-                            href={lab.pdf_url}
+                            href={(() => {
+                              const backendBase = (import.meta.env.VITE_API_URL || 'https://ayu-disha.onrender.com/api').replace(/\/api\/?$/, '');
+                              if (!lab.pdf_url) return `${backendBase}/api/lab/orders/${lab._id || lab.id}/pdf`;
+                              let rawUrl = String(lab.pdf_url).replace(/^["']|["']$/g, '').trim();
+                              if (/^https?:\/\//i.test(rawUrl)) return rawUrl;
+                              
+                              return `${backendBase}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
+                            })()}
                             target="_blank"
                             rel="noopener noreferrer"
-                            onClick={(e) => {
-                              // Open PDF in new tab, preventing auth headers from being sent
-                              e.preventDefault();
-                              window.open(lab.pdf_url, '_blank', 'noopener,noreferrer');
-                            }}
                             className="flex items-center gap-1 text-xs text-blue-600 font-semibold bg-blue-50 px-2.5 py-1 rounded-lg hover:bg-blue-100 transition-colors"
                           >
                             <span>PDF</span>
