@@ -8,6 +8,7 @@ from models.user import UserResponse
 from models.patient import PatientResponse, VisitResponse
 from config import settings
 from groq import AsyncGroq
+from services.ai_routing import assign_referral_to_specialist
 import json
 import os
 import tempfile
@@ -120,10 +121,21 @@ async def get_queue(current_user: UserResponse = Depends(require_role("doctor"))
     hospital_id = current_user.hospital
     
     # query visits for in_queue AND referral_rejected (so doctor sees rejected ones too)
-    visits = await db.visits.find({
+    visits_cursor = db.visits.find({
         "hospital_id": hospital_id,
         "status": {"$in": ["in_queue", "referral_rejected"]}
-    }).to_list(100)
+    })
+    
+    all_visits = await visits_cursor.to_list(200)
+    
+    # Filter out referrals that are assigned to OTHER doctors
+    visits = []
+    for v in all_visits:
+        if v.get("appointment_type") == "referred":
+            # If it has an assigned doctor, it must match current_user.id
+            if v.get("assigned_doctor_id") and v.get("assigned_doctor_id") != current_user.id:
+                continue
+        visits.append(v)
     
     queue = []
     now = datetime.utcnow()
@@ -897,11 +909,19 @@ async def create_referral(data: ReferralCreate, current_user: UserResponse = Dep
     if not target_hospital:
         raise HTTPException(status_code=400, detail="Target hospital not found in database")
         
+    routing_res = await assign_referral_to_specialist(db, data.reason, data.to_hospital_id, override_specialty=data.to_speciality)
+    if not routing_res.get("success"):
+        raise HTTPException(status_code=400, detail=routing_res.get("error_message"))
+        
     referral_doc = {
         "visit_id": data.visit_id,
         "patient_id": data.patient_id,
         "to_hospital_id": data.to_hospital_id,
-        "to_speciality": data.to_speciality,
+        "to_speciality": routing_res.get("required_specialty"),
+        "ai_recommended_specialty": routing_res.get("required_specialty"),
+        "assigned_specialty": routing_res.get("required_specialty"),
+        "assigned_doctor_id": routing_res.get("assigned_doctor_id"),
+        "assigned_doctor_name": routing_res.get("assigned_doctor_name"),
         "reason": data.reason,
         "urgency": data.urgency,
         "ai_summary": data.summary,
@@ -925,9 +945,12 @@ async def create_referral(data: ReferralCreate, current_user: UserResponse = Dep
         "hospital_id": data.to_hospital_id,
         "date": datetime.utcnow(),
         "created_at": datetime.utcnow(),
-        "chief_complaint": f"Clinician Referral ({data.to_speciality}): {data.reason[:100]}...",
+        "chief_complaint": f"Clinician Referral ({routing_res.get('required_specialty')}): {data.reason[:100]}...",
         "status": "in_queue",
         "appointment_type": "referred",
+        "doctor_name": routing_res.get("assigned_doctor_name"),
+        "assigned_doctor_id": routing_res.get("assigned_doctor_id"),
+        "required_specialty": routing_res.get("required_specialty"),
         "risk_tag": "urgent" if data.urgency in ["urgent", "emergency"] else "watch",
         "referred_by": f"Dr. {current_user.name}",
         "referral_id": referral_id,
@@ -935,7 +958,14 @@ async def create_referral(data: ReferralCreate, current_user: UserResponse = Dep
         "prescriptions": []
     })
     
-    return {"status": "success", "referral_id": referral_id}
+    return {
+        "status": "success",
+        "referral_id": referral_id,
+        "to_hospital_id": data.to_hospital_id,
+        "to_speciality": data.to_speciality,
+        "assigned_doctor": referral_doc.get("to_doctor_name") or None,
+        "referral_status": "Awaiting doctor assignment" if not referral_doc.get("to_doctor_name") else "Assigned"
+    }
 
 # --- DIFFERENTIAL DIAGNOSIS ---
 

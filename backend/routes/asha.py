@@ -21,6 +21,7 @@ from services.transcription_service import transcription_service
 from bson import ObjectId
 from groq import AsyncGroq
 from config import settings
+from services.ai_routing import assign_referral_to_specialist
 
 rate_limit_store = defaultdict(list)
 
@@ -59,7 +60,25 @@ async def get_households(current_user: UserResponse = Depends(get_current_user))
     households.sort(key=get_risk_weight)
     
     for h in households:
-        h["id"] = str(h.pop("_id"))
+        h_id_str = str(h.pop("_id"))
+        h["id"] = h_id_str
+        
+        # Calculate total visit count across all recorded visits
+        if "visits" in h and isinstance(h["visits"], list) and len(h["visits"]) > 0:
+            h["total_visits"] = len(h["visits"])
+        else:
+            try:
+                hh_obj_id = safe_object_id(h_id_str)
+                count = await db.asha_visits.count_documents({
+                    "$or": [
+                        {"household_id": h_id_str},
+                        {"household_id": str(hh_obj_id)}
+                    ],
+                    "asha_id": current_user.id
+                })
+            except Exception:
+                count = await db.asha_visits.count_documents({"household_id": h_id_str, "asha_id": current_user.id})
+            h["total_visits"] = count
     
     return households
 
@@ -89,12 +108,25 @@ async def get_household(household_id: str, current_user: UserResponse = Depends(
         
     h["id"] = str(h.pop("_id"))
     
-    visits_cursor = db.asha_visits.find({"household_id": household_id, "asha_id": current_user.id}).sort("created_at", -1)
-    visits = await visits_cursor.to_list(length=10)
+    try:
+        hh_obj_id = safe_object_id(household_id)
+        visits_cursor = db.asha_visits.find({
+            "$or": [
+                {"household_id": household_id},
+                {"household_id": str(hh_obj_id)}
+            ],
+            "asha_id": current_user.id
+        }).sort("created_at", -1)
+    except Exception:
+        visits_cursor = db.asha_visits.find({"household_id": household_id, "asha_id": current_user.id}).sort("created_at", -1)
+
+    visits = await visits_cursor.to_list(length=50)
     for v in visits:
         v["id"] = str(v.pop("_id"))
+        if "_id" in v: v.pop("_id")
         
     h["visit_history"] = visits
+    h["total_visits"] = len(visits)
     return h
 
 @router.post("/visits")
@@ -144,23 +176,54 @@ async def submit_visit(visit: VisitCreate, current_user: UserResponse = Depends(
     
     await db.households.update_one(
         {"_id": safe_object_id(visit.household_id)},
-        {"$set": {
-            "last_visit_date": datetime.utcnow(),
-            "risk_level": risk
-        }}
+        {
+            "$set": {
+                "last_visit_date": datetime.utcnow(),
+                "risk_level": risk
+            },
+            "$inc": {"visit_count": 1},
+            "$push": {
+                "visits": {
+                    "id": visit_id,
+                    "member_id": visit.member_id,
+                    "visit_type": visit.visit_type,
+                    "risk_level": risk,
+                    "observations": visit.observations,
+                    "ai_reasoning": visit.ai_reasoning,
+                    "created_at": datetime.utcnow().isoformat()
+                }
+            }
+        }
     )
     
     if urgent:
+        # Determine specialty and assign doctor
+        symptoms = visit.ai_reasoning or visit.observations or "Urgent evaluation needed"
+        hospital_target = "AUTO_ASSIGNED"
+        
+        # Use first hospital for auto assignment
+        first_hospital = await db.hospitals.find_one({})
+        if first_hospital:
+            hospital_target = first_hospital["name"]
+            
+        routing_res = await assign_referral_to_specialist(db, symptoms, hospital_target)
+        if not routing_res.get("success"):
+            raise HTTPException(status_code=400, detail=routing_res.get("error_message"))
+            
         ref_dict = {
             "patient_id": visit.member_id,
             "household_id": visit.household_id,
-            "to_hospital_id": "AUTO_ASSIGNED",
+            "to_hospital_id": hospital_target,
             "visit_id": visit_id,
             "urgency": "Today",
             "from_worker_id": current_user.id,
             "from_worker_name": current_user.name,
             "asha_observations": str(visit.observations) if visit.observations else "",
             "ai_summary": visit.ai_reasoning,
+            "ai_recommended_specialty": routing_res.get("required_specialty"),
+            "assigned_specialty": routing_res.get("required_specialty"),
+            "assigned_doctor_id": routing_res.get("assigned_doctor_id"),
+            "assigned_doctor_name": routing_res.get("assigned_doctor_name"),
             "created_at": datetime.utcnow(),
             "status": "pending",
             "asha_id": current_user.id
@@ -168,14 +231,15 @@ async def submit_visit(visit: VisitCreate, current_user: UserResponse = Depends(
         ref_res = await db.referrals.insert_one(ref_dict)
 
         # BRIDGE TO CLINICIAN QUEUE
-        first_hospital = await db.hospitals.find_one({})
-        target_hospital = first_hospital["name"] if first_hospital else "General Hospital"
+        # target_hospital already determined above
 
         await db.visits.insert_one({
             "patient_id": visit.member_id,
-            "hospital_id": target_hospital,
-            "hospital_name": target_hospital,
-            "doctor_name": "Pending Assignment",
+            "hospital_id": hospital_target,
+            "hospital_name": hospital_target,
+            "doctor_name": routing_res.get("assigned_doctor_name"),
+            "assigned_doctor_id": routing_res.get("assigned_doctor_id"),
+            "required_specialty": routing_res.get("required_specialty"),
             "date": datetime.utcnow(),
             "created_at": datetime.utcnow(),
             "chief_complaint": f"ASHA Referral: {visit.ai_reasoning[:100]}...",
@@ -320,12 +384,24 @@ async def send_referral(ref: ReferralCreate, current_user: UserResponse = Depend
     except Exception as e:
         print(f"Patient Stub Creation Error: {e}")
 
+    # AI ROUTING: Assign to Specialist
+    symptoms = ref.ai_summary or "Clinical assessment requested"
+    target_hosp = hospital_check.get("name") if hospital_check else ref.to_hospital_id
+    
+    routing_res = await assign_referral_to_specialist(db, symptoms, target_hosp)
+    if not routing_res.get("success"):
+        raise HTTPException(status_code=400, detail=routing_res.get("error_message"))
+
     ref_dict = ref.dict()
     ref_dict["asha_id"] = current_user.id
     ref_dict["from_worker_id"] = current_user.id
     ref_dict["from_worker_name"] = current_user.name
     ref_dict["created_at"] = datetime.utcnow()
     ref_dict["status"] = "pending"
+    ref_dict["ai_recommended_specialty"] = routing_res.get("required_specialty")
+    ref_dict["assigned_specialty"] = routing_res.get("required_specialty")
+    ref_dict["assigned_doctor_id"] = routing_res.get("assigned_doctor_id")
+    ref_dict["assigned_doctor_name"] = routing_res.get("assigned_doctor_name")
     
     res = await db.referrals.insert_one(ref_dict)
     ref_id = str(res.inserted_id)
@@ -340,6 +416,9 @@ async def send_referral(ref: ReferralCreate, current_user: UserResponse = Depend
         "chief_complaint": ref.ai_summary or "Referred for clinical assessment",
         "status": "in_queue",
         "appointment_type": "referred",
+        "doctor_name": routing_res.get("assigned_doctor_name"),
+        "assigned_doctor_id": routing_res.get("assigned_doctor_id"),
+        "required_specialty": routing_res.get("required_specialty"),
         "risk_tag": "urgent" if ref.urgency == "Today" else "watch",
         "referred_by": current_user.name,
         "referral_id": ref_id,

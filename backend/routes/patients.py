@@ -7,6 +7,7 @@ from middleware.auth_middleware import get_current_user
 from models.user import UserResponse
 from models.patient import PatientCreate, PatientResponse, ConsentCreate, ConsentResponse, VisitResponse
 from bson import ObjectId
+from services.ai_routing import assign_referral_to_specialist
 from groq import AsyncGroq
 from config import settings
 
@@ -379,16 +380,24 @@ async def log_symptoms(req: SymptomLogRequest, current_user: UserResponse = Depe
         hospital_doc = await db.hospitals.find_one({"name": req.preferred_hospital_id})
         hospital_name = hospital_doc.get("name", req.preferred_hospital_id) if hospital_doc else req.preferred_hospital_id
 
+        routing_res = await assign_referral_to_specialist(db, req.transcript, hospital_name)
+        if not routing_res.get("success"):
+            return {"summary": routing_res.get("error_message")}
+
         ref_dict = {
             "patient_id": patient_id,
-            "to_hospital_id": req.preferred_hospital_id,
-            "to_speciality": target_speciality,
+            "to_hospital_id": hospital_name,
+            "to_speciality": routing_res.get("required_specialty"),
             "urgency": "Immediate" if risk_level == "SEVERE" else "Today",
             "from_worker_id": current_user.id,
             "from_worker_name": patient_name,
             "asha_observations": f"Self-reported: {req.transcript}",
             "ai_summary": result_json.get("reasoning", ""),
-            "reason": f"Auto-referred ({target_speciality}): {result_json.get('reasoning', '')[:120]}",
+            "ai_recommended_specialty": routing_res.get("required_specialty"),
+            "assigned_specialty": routing_res.get("required_specialty"),
+            "assigned_doctor_id": routing_res.get("assigned_doctor_id"),
+            "assigned_doctor_name": routing_res.get("assigned_doctor_name"),
+            "reason": f"Auto-referred ({routing_res.get('required_specialty')}): {result_json.get('reasoning', '')[:120]}",
             "created_at": datetime.utcnow(),
             "status": "pending",
             "asha_id": "SELF"
@@ -399,14 +408,16 @@ async def log_symptoms(req: SymptomLogRequest, current_user: UserResponse = Depe
             "patient_id": patient_id,
             "hospital_id": req.preferred_hospital_id,
             "hospital_name": hospital_name,
-            "doctor_name": "Pending Assignment",
+            "doctor_name": routing_res.get("assigned_doctor_name"),
+            "assigned_doctor_id": routing_res.get("assigned_doctor_id"),
+            "required_specialty": routing_res.get("required_specialty"),
             "date": datetime.utcnow(),
             "created_at": datetime.utcnow(),
-            "chief_complaint": f"Self Referral ({target_speciality}): {req.transcript[:100]}...",
+            "chief_complaint": f"Self Referral ({routing_res.get('required_specialty')}): {req.transcript[:100]}...",
             "status": "in_queue",
             "appointment_type": "referred",
             "risk_tag": "urgent" if risk_level in ["URGENT", "SEVERE"] else "watch",
-            "referred_by": "Self (AI Triage)",
+            "referred_by": patient_name,
             "referral_id": str(ref_res.inserted_id),
             "diagnosis": [],
             "prescriptions": []
