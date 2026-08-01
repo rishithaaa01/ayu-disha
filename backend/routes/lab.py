@@ -133,11 +133,13 @@ async def upload_pdf_to_cloudinary(file_path: str, lab_order_id: str) -> Optiona
     try:
         result = cloudinary.uploader.upload(
             file_path,
-            resource_type="raw",
+            resource_type="image",
             folder="ayu_disha/lab_reports",
-            public_id=f"lab_{lab_order_id}_{uuid.uuid4().hex[:8]}.pdf",
+            public_id=f"lab_{lab_order_id}_{uuid.uuid4().hex[:8]}",
             access_mode="public"
         )
+        # For image resources, Cloudinary correctly identifies it as a PDF and 
+        # serves it inline with Content-Type: application/pdf.
         return result.get("secure_url")
     except Exception as e:
         print(f"Cloudinary upload error: {e}")
