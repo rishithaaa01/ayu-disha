@@ -40,5 +40,6 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = str(Path(__file__).parent / ".env")
+        extra = "ignore"
 
 settings = Settings()
