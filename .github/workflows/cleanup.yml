@@ -1,0 +1,18 @@
+name: Cleanup Old Workflows
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Delete all workflow runs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Fetch up to 1000 workflow run IDs and delete them all
+          gh run list --limit 1000 --json databaseId -q ".[].databaseId" | xargs -I{} gh run delete {} || true
