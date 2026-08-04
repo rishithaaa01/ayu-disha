@@ -1,0 +1,25 @@
+name: Cleanup Deployments
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      deployments: write
+    steps:
+      - name: Delete all deployments
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Fetching deployments..."
+          deployments=$(gh api repos/${{ github.repository }}/deployments --paginate -q ".[].id")
+          
+          for id in $deployments; do
+            echo "Deactivating and deleting deployment $id"
+            gh api -X POST repos/${{ github.repository }}/deployments/$id/statuses -f state=inactive || true
+            gh api -X DELETE repos/${{ github.repository }}/deployments/$id || true
+          done
+          echo "Done clearing deployments."
