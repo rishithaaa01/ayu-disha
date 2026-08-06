@@ -187,3 +187,69 @@ async def delete_hospital(
         raise HTTPException(status_code=404, detail="Hospital not found.")
 
     return {"status": "success", "message": "Hospital deleted successfully."}
+
+@router.get("/users")
+async def list_users(current_user: UserResponse = Depends(require_role("admin", "pho"))):
+    db = get_database()
+    users_cursor = db.users.find({}).sort("created_at", -1)
+    users = await users_cursor.to_list(length=500)
+    
+    result = []
+    for u in users:
+        created_at = u.get("created_at", datetime.utcnow())
+        if isinstance(created_at, datetime):
+            created_at_str = created_at.strftime("%Y-%m-%d")
+        else:
+            created_at_str = str(created_at)
+            
+        result.append({
+            "id": str(u["_id"]),
+            "name": u.get("name", "Unknown"),
+            "email": u.get("email", ""),
+            "role": u.get("role", "user"),
+            "hospital": u.get("hospital", u.get("district", "N/A")),
+            "status": u.get("status", "Active"),
+            "created_at": created_at_str
+        })
+    return result
+
+@router.get("/maternal-stats")
+async def get_maternal_stats(current_user: UserResponse = Depends(require_role("admin", "pho"))):
+    db = get_database()
+    
+    high_risk = await db.households.count_documents({"risk_level": "red"})
+    
+    # Get last 10 high-risk households as registry
+    registry_cursor = db.households.find({"risk_level": "red"}).sort("last_visit_date", -1).limit(10)
+    registry_docs = await registry_cursor.to_list(length=10)
+    
+    registry = []
+    for doc in registry_docs:
+        # Get ASHA name
+        asha_name = "Unknown ASHA"
+        try:
+            asha = await db.users.find_one({"_id": ObjectId(doc.get("created_by"))}) if doc.get("created_by") else None
+            if asha:
+                asha_name = asha.get("name", "Unknown ASHA")
+        except Exception:
+            pass
+        
+        registry.append({
+            "id": str(doc["_id"]),
+            "name": doc.get("family_name", doc.get("name", "Unknown Family")),
+            "age": "--",
+            "trimester": "High Risk Household",
+            "hb": "--",
+            "risk": "Severe Risk",
+            "asha": asha_name,
+            "hospital": doc.get("village", "Unknown"),
+            "anc_status": "Pending"
+        })
+        
+    return {
+        "high_risk_pregnant": high_risk,
+        "anc_checkups_completed": 0,
+        "immunization_coverage_pct": 0,
+        "institutional_deliveries_pct": 0,
+        "registry": registry
+    }
