@@ -109,6 +109,50 @@ class ReferralCreate(BaseModel):
 
 # --- QUEUE ENDPOINTS ---
 
+@router.get("/queue-summary")
+async def get_queue_summary(current_user: UserResponse = Depends(require_role("doctor"))):
+    """
+    Returns the count of waiting patients, completed visits, and pending labs for the doctor's hospital.
+    """
+    if not current_user.hospital:
+        raise HTTPException(status_code=403, detail="Doctor is not assigned to any hospital")
+        
+    db = get_database()
+    hospital_id = current_user.hospital
+    
+    # 1. Waiting Count
+    visits_cursor = db.visits.find({
+        "hospital_id": hospital_id,
+        "status": {"$in": ["in_queue", "referral_rejected"]}
+    })
+    all_visits = await visits_cursor.to_list(1000)
+    waiting_count = 0
+    for v in all_visits:
+        if v.get("appointment_type") == "referred":
+            if v.get("assigned_doctor_id") and v.get("assigned_doctor_id") != current_user.id:
+                continue
+        waiting_count += 1
+        
+    # 2. Completed Count (today)
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    completed_count = await db.visits.count_documents({
+        "hospital_id": hospital_id,
+        "status": "completed",
+        "date": {"$gte": today_start}
+    })
+    
+    # 3. Pending Labs Count
+    pending_labs_count = await db.lab_orders.count_documents({
+        "hospital_id": hospital_id,
+        "status": {"$in": ["pending", "ordered"]}
+    })
+    
+    return {
+        "waiting_count": waiting_count,
+        "completed_count": completed_count,
+        "pending_labs_count": pending_labs_count
+    }
+
 @router.get("/queue", response_model=List[QueueEntry])
 async def get_queue(current_user: UserResponse = Depends(require_role("doctor"))):
     """
