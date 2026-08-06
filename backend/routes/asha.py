@@ -130,7 +130,7 @@ async def get_household(household_id: str, current_user: UserResponse = Depends(
     return h
 
 @router.post("/visits")
-async def submit_visit(visit: VisitCreate, current_user: UserResponse = Depends(get_current_user)):
+async def submit_visit(request: Request, visit: VisitCreate, current_user: UserResponse = Depends(get_current_user)):
     db = get_database()
     
     # DEBUG LOGGING
@@ -206,7 +206,8 @@ async def submit_visit(visit: VisitCreate, current_user: UserResponse = Depends(
         if first_hospital:
             hospital_target = first_hospital["name"]
             
-        routing_res = await assign_referral_to_specialist(db, symptoms, hospital_target)
+        client_type = request.headers.get("x-client-type", "web")
+        routing_res = await assign_referral_to_specialist(db, symptoms, hospital_target, client_type=client_type)
         if not routing_res.get("success"):
             raise HTTPException(status_code=400, detail=routing_res.get("error_message"))
             

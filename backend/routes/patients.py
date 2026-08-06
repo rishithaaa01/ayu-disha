@@ -1,5 +1,5 @@
 import os
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from typing import List, Dict, Any
 from datetime import datetime, timedelta
 from database import get_database
@@ -289,7 +289,7 @@ class SymptomLogRequest(BaseModel):
     preferred_hospital_id: str = "Govt General Hospital Chennai"
 
 @router.post("/me/symptoms")
-async def log_symptoms(req: SymptomLogRequest, current_user: UserResponse = Depends(get_current_user)):
+async def log_symptoms(req_api: Request, req: SymptomLogRequest, current_user: UserResponse = Depends(get_current_user)):
     db = get_database()
     patient = await db.patients.find_one({"user_id": current_user.id})
     if not patient:
@@ -299,29 +299,7 @@ async def log_symptoms(req: SymptomLogRequest, current_user: UserResponse = Depe
     patient_name = patient.get("name", "Unknown Patient")
     patient_village = patient.get("village") or current_user.village
     
-    prompt = f"""
-    You are a professional clinical triage AI agent.
-    Analyze the patient's self-reported symptoms thoroughly. Avoid general or vague explanations. Provide detailed, specific, and clear explanations of what their symptoms could indicate and what exact next steps they must follow.
-    
-    Patient: {patient.get('name', 'Unknown')}
-    Symptoms: {req.transcript}
-    
-    Respond in this exact JSON format:
-    {{
-      "risk_level": "LOW",
-      "reasoning": "A detailed, clinical explanation (2-3 sentences) of why this risk level was assigned based on the specific symptoms reported.",
-      "recommendation": "A detailed, action-oriented health recommendation (2-3 sentences) detailing specific self-care steps, warning signs to watch for, and exact guidelines on when and where to seek care.",
-      "refer_to_doctor": false
-    }}
-    
-    Possible risk_level values: LOW, WATCH, URGENT, SEVERE
-    LOW = manageable at home with basic care
-    WATCH = needs monitoring, see doctor if worsens
-    URGENT = needs doctor within 24 hours
-    SEVERE = go to emergency immediately
-    """
-    
-    groq_api_key = settings.groq_api_key
+    client_type = req_api.headers.get("x-client-type", "web")
     
     result_json = {
         "risk_level": "WATCH",
@@ -330,19 +308,62 @@ async def log_symptoms(req: SymptomLogRequest, current_user: UserResponse = Depe
         "refer_to_doctor": True
     }
     
-    if groq_api_key:
+    if client_type == "mobile":
+        print("📡 Running patient triage via LOCAL AI (XGBoost + Random Forest)...")
         try:
-            client = AsyncGroq(api_key=groq_api_key)
-            completion = await client.chat.completions.create(
-                messages=[{"role": "user", "content": prompt}],
-                model="llama-3.1-8b-instant",
-                temperature=0.1,
-                response_format={"type": "json_object"}
-            )
-            result_str = completion.choices[0].message.content.strip()
-            result_json = json.loads(result_str)
+            from services.local_ai_service import local_ai
+            insights = local_ai.generate_clinical_insights(req.transcript)
+            
+            # Map standard structure to result_json format
+            risk_level = insights.get("Risk Level", "Moderate").upper()
+            if risk_level == "MODERATE": risk_level = "WATCH"
+            elif risk_level == "HIGH": risk_level = "URGENT"
+            elif risk_level == "CRITICAL": risk_level = "SEVERE"
+            
+            result_json["risk_level"] = risk_level
+            result_json["reasoning"] = f"Predicted: {insights.get('Disease', 'Unknown')} - {insights.get('Follow-up Advice')}"
+            result_json["recommendation"] = insights.get('Suggested Tests', 'Routine')
+            result_json["refer_to_doctor"] = True if risk_level in ["URGENT", "SEVERE", "WATCH"] else False
         except Exception as e:
-            print(f"Groq API Error: {str(e)}")
+            print(f"Local AI Error: {e}")
+    else:
+        # Web Flow -> Groq
+        prompt = f"""
+        You are a professional clinical triage AI agent.
+        Analyze the patient's self-reported symptoms thoroughly. Avoid general or vague explanations. Provide detailed, specific, and clear explanations of what their symptoms could indicate and what exact next steps they must follow.
+        
+        Patient: {patient.get('name', 'Unknown')}
+        Symptoms: {req.transcript}
+        
+        Respond in this exact JSON format:
+        {{
+          "risk_level": "LOW",
+          "reasoning": "A detailed, clinical explanation (2-3 sentences) of why this risk level was assigned based on the specific symptoms reported.",
+          "recommendation": "A detailed, action-oriented health recommendation (2-3 sentences) detailing specific self-care steps, warning signs to watch for, and exact guidelines on when and where to seek care.",
+          "refer_to_doctor": false
+        }}
+        
+        Possible risk_level values: LOW, WATCH, URGENT, SEVERE
+        LOW = manageable at home with basic care
+        WATCH = needs monitoring, see doctor if worsens
+        URGENT = needs doctor within 24 hours
+        SEVERE = go to emergency immediately
+        """
+        
+        groq_api_key = settings.groq_api_key
+        if groq_api_key:
+            try:
+                client = AsyncGroq(api_key=groq_api_key)
+                completion = await client.chat.completions.create(
+                    messages=[{"role": "user", "content": prompt}],
+                    model="llama-3.1-8b-instant",
+                    temperature=0.1,
+                    response_format={"type": "json_object"}
+                )
+                result_str = completion.choices[0].message.content.strip()
+                result_json = json.loads(result_str)
+            except Exception as e:
+                print(f"Groq API Error: {str(e)}")
             
     risk_level = result_json.get("risk_level", "WATCH")
     refer_to_doctor = result_json.get("refer_to_doctor", False)

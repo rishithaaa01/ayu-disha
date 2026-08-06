@@ -24,14 +24,33 @@ VALID_SPECIALTIES = [
     "Endocrinology"
 ]
 
-async def determine_referral_speciality(symptoms_text: str) -> str:
+async def determine_referral_speciality(symptoms_text: str, client_type: str = "web") -> str:
     """
-    Uses Groq to analyze symptoms/complaints and return the most appropriate medical specialty.
+    Uses Groq or Local AI to analyze symptoms/complaints and return the most appropriate medical specialty.
     Defaults to "General Medicine" if vague or if an error occurs.
     """
     if not symptoms_text or not symptoms_text.strip():
         return "General Medicine"
         
+    if client_type == "mobile":
+        try:
+            print("📡 Determining referral specialty via LOCAL AI (Random Forest)...")
+            from services.local_ai_service import local_ai
+            res = local_ai.predict_referral(symptoms_text)
+            spec = res.get("recommended_specialty", "General Medicine")
+            print(f"✅ Local AI recommended specialty: {spec}")
+            
+            # Ensure it matches valid specialties
+            for valid_specialty in VALID_SPECIALTIES:
+                if valid_specialty.lower() == spec.lower():
+                    return valid_specialty
+                    
+            return "General Medicine"
+        except Exception as e:
+            logger.error(f"Error in Local AI referral prediction: {e}")
+            return "General Medicine"
+            
+    # Web Flow -> Groq
     groq_api_key = settings.groq_api_key
     if not groq_api_key:
         logger.warning("Groq API key not found. Defaulting specialty to General Medicine.")
@@ -82,7 +101,7 @@ async def determine_referral_speciality(symptoms_text: str) -> str:
         logger.error(f"Error determining specialty with Groq: {e}")
         return "General Medicine"
 
-async def assign_referral_to_specialist(db, symptoms_text: str, hospital_id: str, override_specialty: str = None) -> dict:
+async def assign_referral_to_specialist(db, symptoms_text: str, hospital_id: str, override_specialty: str = None, client_type: str = "web") -> dict:
     """
     Determines the required specialty, finds eligible active doctors in the hospital,
     and assigns the referral to the one with the least workload.
@@ -97,7 +116,7 @@ async def assign_referral_to_specialist(db, symptoms_text: str, hospital_id: str
     if override_specialty:
         specialty = override_specialty
     else:
-        specialty = await determine_referral_speciality(symptoms_text)
+        specialty = await determine_referral_speciality(symptoms_text, client_type)
     
     # Resolve hospital by name or id
     hospital_query = {"$or": [{"name": hospital_id}]}

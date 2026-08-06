@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from bson import ObjectId
@@ -368,9 +368,9 @@ async def get_patient_record(patient_id: str, current_user: UserResponse = Depen
         }
 
 @router.get("/patients/{patient_id}/summary")
-async def get_patient_summary(patient_id: str, current_user: UserResponse = Depends(require_role("doctor"))):
+async def get_patient_summary(request: Request, patient_id: str, current_user: UserResponse = Depends(require_role("doctor"))):
     """
-    Generates a 4-sentence AI clinical summary using Groq.
+    Generates a 4-sentence AI clinical summary using Groq or Local AI.
     Works with or without consent — shows limited info without consent.
     """
     if not current_user.hospital:
@@ -407,7 +407,7 @@ async def get_patient_summary(patient_id: str, current_user: UserResponse = Depe
             "status": {"$in": ["pending", "accepted"]}
         })
 
-    context = f"Patient: {patient['name']}, Gender: {patient['gender']}, DOB: {patient['date_of_birth']}\n"
+    context = f"Patient: {patient['name']}, Gender: {patient.get('gender', 'U')}, DOB: {patient.get('date_of_birth', 'U')}\n"
     context += f"Allergies: {', '.join(patient.get('allergies', []) or ['None known'])}\n"
 
     if has_consent:
@@ -419,7 +419,21 @@ async def get_patient_summary(patient_id: str, current_user: UserResponse = Depe
     if referral:
         context += f"ASHA/Self Referral Summary: {referral.get('ai_summary', '')}\n"
         context += f"Chief Complaint from Referral: {referral.get('asha_observations', '')}\n"
+        
+    # Check Client Type
+    client_type = request.headers.get("x-client-type", "web")
+    
+    if client_type == "mobile":
+        print(f"📡 Generating Clinical Summary via Local AI (BART/T5) for Mobile App...")
+        from services.local_ai_service import local_ai
+        try:
+            summary = local_ai.summarize_text(context)
+            return {"summary": summary, "generated_at": datetime.utcnow(), "consent": has_consent}
+        except Exception as e:
+            print(f"Local AI Summary Error: {e}")
+            return {"summary": "Unable to generate summary locally.", "generated_at": datetime.utcnow(), "consent": has_consent}
 
+    # Web Flow -> Groq
     groq_api_key = settings.groq_api_key
     if not groq_api_key:
         return {"summary": "AI summary unavailable — Groq API key not configured.", "generated_at": datetime.utcnow(), "consent": has_consent}

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request
 from services.transcription_service import transcription_service
 from middleware.auth_middleware import get_current_user
 from models.user import UserResponse
@@ -22,6 +22,7 @@ def check_rate_limit(key: str, limit: int, window: int) -> bool:
 
 @router.post("/transcribe")
 async def transcribe_audio(
+    request: Request,
     file: UploadFile = File(...),
     current_user: UserResponse = Depends(get_current_user)
 ):
@@ -52,6 +53,8 @@ async def transcribe_audio(
     temp_filename = f"upload_{uuid.uuid4().hex}{ext}"
     temp_path = os.path.join(temp_dir, temp_filename)
     
+    client_type = request.headers.get("x-client-type", "web")
+    
     try:
         # Enforce max upload size: 10MB
         MAX_FILE_SIZE = 10 * 1024 * 1024
@@ -67,7 +70,7 @@ async def transcribe_audio(
                 buffer.write(chunk)
         
         # Process transcription
-        text = await transcription_service.transcribe(temp_path)
+        text = await transcription_service.transcribe(temp_path, client_type=client_type)
         return {"transcript": text}
     except HTTPException:
         raise

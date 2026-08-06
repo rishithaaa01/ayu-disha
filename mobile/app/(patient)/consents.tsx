@@ -114,8 +114,8 @@ export default function ConsentsScreen() {
           </View>
         ) : (
           <View className="mb-6">
-            {activeConsents.map((consent: any) => (
-              <View key={consent.id} className="bg-white rounded-2xl border border-green-100 shadow-sm p-4 mb-3">
+            {activeConsents.map((consent: any, index: number) => (
+              <View key={consent._id || consent.id || index} className="bg-white rounded-2xl border border-green-100 shadow-sm p-4 mb-3">
                 <View className="flex-row items-start justify-between">
                   <View className="flex-row items-start flex-1 mr-2">
                     <View className="bg-green-100 p-2.5 rounded-xl mr-3">
@@ -174,8 +174,8 @@ export default function ConsentsScreen() {
             <Text className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 ml-1">
               Revoked ({revokedConsents.length})
             </Text>
-            {revokedConsents.map((consent: any) => (
-              <View key={consent.id} className="bg-white/60 rounded-2xl border border-gray-100 p-4 mb-3 opacity-70">
+            {revokedConsents.map((consent: any, index: number) => (
+              <View key={consent._id || consent.id || index} className="bg-white/60 rounded-2xl border border-gray-100 p-4 mb-3 opacity-70">
                 <View className="flex-row items-center">
                   <View className="bg-gray-100 p-2.5 rounded-xl mr-3">
                     <User size={18} color="#9ca3af" />

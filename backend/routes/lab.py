@@ -60,8 +60,8 @@ async def extract_pdf_text(pdf_path: str) -> str:
         return ""
 
 
-async def ai_summarize_report(raw_text: str, test_name: str, patient_name: str) -> dict:
-    """Use Groq to extract values and summarize lab report."""
+async def ai_summarize_report(raw_text: str, test_name: str, patient_name: str, client_type: str = "web") -> dict:
+    """Use Groq or Local AI to extract values and summarize lab report."""
     if not raw_text.strip():
         return {
             "summary": "Report uploaded. Manual review required.",
@@ -70,6 +70,27 @@ async def ai_summarize_report(raw_text: str, test_name: str, patient_name: str) 
             "recommendation": "Please review the uploaded PDF report."
         }
 
+    if client_type == "mobile":
+        print("📡 Summarizing Lab Report via LOCAL AI (BART/T5)...")
+        try:
+            from services.local_ai_service import local_ai
+            summary = local_ai.summarize_text(f"Patient: {patient_name}, Test: {test_name}. Report: {raw_text}")
+            return {
+                "summary": summary,
+                "key_values": [],
+                "is_abnormal": "abnormal" in summary.lower() or "high" in summary.lower() or "low" in summary.lower(),
+                "recommendation": "Follow up with physician if symptoms persist or abnormal values noted."
+            }
+        except Exception as e:
+            print(f"Local AI Lab Summary Error: {e}")
+            return {
+                "summary": "AI summary unavailable locally.",
+                "key_values": [],
+                "is_abnormal": False,
+                "recommendation": "Review report manually."
+            }
+
+    # Web Flow -> Groq
     groq_api_key = settings.groq_api_key
     if not groq_api_key:
         return {
@@ -213,6 +234,7 @@ async def get_completed_orders(current_user: UserResponse = Depends(require_role
 
 @router.post("/upload-result/{lab_order_id}")
 async def upload_lab_result(
+    request: Request,
     lab_order_id: str,
     result_text: str = Form(...),
     notes: Optional[str] = Form(None),
@@ -304,11 +326,14 @@ async def upload_lab_result(
     elif result_text:
         combined_text = result_text
 
+    client_type = request.headers.get("x-client-type", "web")
+    
     # AI summary
     ai_result = await ai_summarize_report(
         combined_text or result_text,
         lab_order.get("test_name", "Lab Test"),
-        patient_name
+        patient_name,
+        client_type
     )
 
     # Update the lab order

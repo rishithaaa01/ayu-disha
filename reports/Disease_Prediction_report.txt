@@ -1,0 +1,30 @@
+--- BEST MODEL: XGBoost ---
+
+--- METRICS COMPARISON ---
+{'Model': 'Random Forest', 'Accuracy': 0.2325, 'Precision': 0.24709477865688753, 'Recall': 0.2325, 'F1-Score': 0.23112934272761174, 'ROC-AUC': 0.4842254105879752, 'CV Mean F1': 0.2420850748241075}
+{'Model': 'Logistic Regression', 'Accuracy': 0.235, 'Precision': 0.23858802193582224, 'Recall': 0.235, 'F1-Score': 0.20755377811260536, 'ROC-AUC': 0.4998461749103433, 'CV Mean F1': 0.24969140705306744}
+{'Model': 'SVM', 'Accuracy': 0.2375, 'Precision': 0.25888966508323025, 'Recall': 0.2375, 'F1-Score': 0.22626297240989893, 'ROC-AUC': 0.4829935781746482, 'CV Mean F1': 0.2398225886292852}
+{'Model': 'XGBoost', 'Accuracy': 0.235, 'Precision': 0.2508664507503285, 'Recall': 0.235, 'F1-Score': 0.234384831500995, 'ROC-AUC': 0.48390991366204744, 'CV Mean F1': 0.2532656108649007}
+
+
+--- CLASSIFICATION REPORT ---
+              precision    recall  f1-score   support
+
+           0       0.27      0.35      0.30       108
+           1       0.26      0.22      0.24       109
+           2       0.33      0.17      0.23        99
+           3       0.13      0.18      0.15        84
+
+    accuracy                           0.23       400
+   macro avg       0.25      0.23      0.23       400
+weighted avg       0.25      0.23      0.23       400
+
+
+--- CONFUSION MATRIX ---
+[[38 29 12 29]
+ [41 24  9 35]
+ [32 17 17 33]
+ [31 24 14 15]]
+
+--- FEATURE IMPORTANCE ---
+Model supports feature importances. (Top features saved in model object)
