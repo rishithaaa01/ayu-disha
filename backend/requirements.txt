@@ -22,3 +22,7 @@ torch
 torchaudio
 soundfile
 librosa
+pandas
+scikit-learn
+xgboost
+joblib
