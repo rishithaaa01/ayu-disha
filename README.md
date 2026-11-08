@@ -1,52 +1,104 @@
 # Ayu Disha
 
-A rural-first digital healthcare platform designed to support community health workers, patients, and clinical teams through connected care workflows.
+**Ayu Disha** is a healthcare application project organized into mobile, web, and backend components. The repository contains workflows for patient records, community health workers, clinical teams, appointments, and AI-assisted services.
 
-## Overview
+> **Implementation note:** This README describes the code currently checked into this repository. Its mobile app is Expo / React Native, its API is FastAPI, and its web client is React with Vite. Other Ayu Disha repository variants may contain different or newer implementations.
 
-Ayu Disha brings together mobile and web experiences for community-level healthcare delivery. The project is designed around connectivity-resilient workflows and coordination between field workers and clinical teams.
+## Repository architecture
 
-Core workflow areas include:
-- Community health and patient information workflows
-- AI-assisted assessment support
-- Referrals and appointment coordination
-- Clinical records and follow-up workflows
-- Field-friendly access for low-connectivity environments
+| Component | Location | Current implementation |
+| --- | --- | --- |
+| Mobile app | `mobile/` | Expo, React Native, TypeScript |
+| API backend | `backend/` | Python, FastAPI |
+| Database | Backend configuration | MongoDB |
+| Web client | `web/` | React, Vite, TypeScript |
+| Native web wrapper | `web/` | Capacitor for Android and iOS |
 
-## Application Structure
+## Application areas
 
-| Directory | Purpose |
-| --- | --- |
-| `mobile/` | Mobile application |
-| `web/` | Web application |
-| `backend/` | Backend services and APIs |
-| `assets/` | Shared project assets |
-| `reports/` | Project reports and supporting material |
+The backend is organized into route groups and services for areas including:
 
-## Technology
+- Authentication and user access
+- Patients and community health worker workflows
+- Clinician, administrator, and laboratory workflows
+- Appointments and visit-related services
+- Voice and local AI-related endpoints
+- Reminder scheduling
 
-- **Mobile:** Flutter and Dart
-- **Web:** React
-- **Backend:** Node.js
-- **Database:** PostgreSQL
+The exact features available in a running environment depend on the configured services and credentials.
 
-> The repository contains multiple application components. Refer to the individual project directories for component-specific setup instructions and environment configuration.
+## Getting started
 
-## Getting Started
+Run each component in its own terminal.
 
-1. Clone the repository.
-2. Open the component directory you want to run.
-3. Review its package/configuration files and local README, if present.
-4. Install the dependencies for that component.
-5. Configure the required environment variables using the component's example configuration.
-6. Run the component using its documented development command.
+### 1. Backend API
 
-## Development Notes
+Requirements: Python 3.10+ and access to a MongoDB database.
 
-- Keep secrets and production credentials out of version control.
-- Use environment-specific configuration for local, staging, and production deployments.
-- Validate changes across the mobile and web workflows when modifying shared API contracts.
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+```
 
-## Project Status
+Edit `backend/.env` and configure at least the MongoDB connection and JWT secret. Add third-party credentials only for integrations you intend to use.
 
-This repository contains the mobile, web, and backend codebases. Setup commands and deployment details should be maintained in the corresponding component directories as they are finalized.
+Start the API:
+
+```bash
+uvicorn main:app --reload
+```
+
+### 2. Mobile application
+
+Requirements: Node.js and the Expo development environment.
+
+```bash
+cd mobile
+npm install
+npm start
+```
+
+Use the Expo CLI prompts to open the app on a device, emulator, or supported web target.
+
+### 3. Web application
+
+Requirements: Node.js.
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+For a production build:
+
+```bash
+npm run build
+```
+
+The web component also contains Capacitor configuration for native Android and iOS packaging.
+
+## Configuration and security
+
+- Keep real API keys, database credentials, JWT secrets, and service-account files out of Git.
+- Use the supplied `.env.example` as the configuration reference.
+- Configure the API base URL for the device or emulator you are testing; `localhost` on a physical phone does not refer to your development computer.
+- Enable external integrations only after their credentials and service-side settings are configured.
+
+## Repository layout
+
+```text
+.
+├── backend/       # FastAPI application, routes, services and jobs
+├── mobile/        # Expo / React Native application
+├── web/           # React + Vite web client and Capacitor project
+├── assets/        # Shared assets
+└── reports/       # Test reports and project analysis
+```
+
+## Development
+
+Before submitting changes, run the relevant checks for the component you changed. Keep API contracts aligned between the mobile client, web client, and backend, and document any new environment variables in `.env.example`.
